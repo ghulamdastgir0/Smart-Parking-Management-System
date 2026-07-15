@@ -1,5 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ReservationResponseDto } from '../../reservation/dto/reservation-response.dto';
+import {
+  ChallanResponseDto,
+  PaymentResponseDto,
+  ReservationResponseDto,
+} from '../../reservation/dto/reservation-response.dto';
 
 export class CheckInResponseDto {
   @ApiProperty({ type: ReservationResponseDto })
@@ -17,4 +21,14 @@ export class CheckInResponseDto {
 export class CheckOutResponseDto {
   @ApiProperty({ type: ReservationResponseDto })
   reservation!: ReservationResponseDto;
+
+  @ApiProperty({
+    type: PaymentResponseDto,
+    description:
+      'Final amount due (base charge + extension/overtime challans). Present the dummy payment screen next.',
+  })
+  payment!: PaymentResponseDto;
+
+  @ApiProperty({ type: [ChallanResponseDto] })
+  challans!: ChallanResponseDto[];
 }

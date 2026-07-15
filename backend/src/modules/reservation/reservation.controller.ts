@@ -19,7 +19,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import {
-  ConfirmPaymentResponseDto,
+  CheckoutPaymentConfirmedResponseDto,
   CreateReservationResponseDto,
 } from './dto/reservation-response.dto';
 import { ReservationService } from './reservation.service';
@@ -33,17 +33,23 @@ export class ReservationController {
 
   @Post()
   @ApiOperation({
-    summary: 'Create a reservation for a parking slot',
+    summary: 'Create a time-slot reservation for a parking slot',
     description:
-      'Atomically holds the slot (AVAILABLE → RESERVED) and creates a PENDING payment. ' +
-      'Redirect the client to the dummy payment flow using the returned payment id next.',
+      'No payment is collected here. Validates the requested interval (arrival → arrival + ' +
+      'duration + 30-minute grace buffer) does not overlap any other active reservation for ' +
+      'the slot, then confirms the reservation immediately and issues the single-use check-in ' +
+      'QR code. Check in within the check-in grace window or the reservation auto-cancels.',
   })
   @ApiResponse({
     status: 201,
-    description: 'Reservation created, awaiting payment',
+    description: 'Reservation confirmed',
     type: CreateReservationResponseDto,
   })
-  @ApiResponse({ status: 409, description: 'Slot is no longer available' })
+  @ApiResponse({
+    status: 409,
+    description:
+      'Requested interval overlaps another reservation for this slot',
+  })
   create(@Body() dto: CreateReservationDto, @Req() req: Request) {
     const user = req.user as AuthenticatedUser;
     return this.reservationService.create(dto, user.userId);
@@ -67,44 +73,45 @@ export class ReservationController {
     return this.reservationService.findOne(id, user);
   }
 
-  @Post(':id/payment/confirm')
+  @Post(':id/checkout-payment/confirm')
   @ApiOperation({
-    summary: 'Dummy payment success callback',
+    summary: 'Dummy checkout payment success callback',
     description:
-      'Simulates a successful payment gateway callback: confirms the reservation and issues ' +
-      'the single-use check-in QR code (the digital parking ticket).',
+      'Simulates a successful payment gateway callback for the final parking charge computed ' +
+      'at checkout: marks the booking COMPLETED, the payment SUCCESSFUL, invalidates the ' +
+      'checkout QR, and releases the slot.',
   })
   @ApiResponse({
     status: 200,
-    description: 'Payment confirmed; reservation is now CONFIRMED',
-    type: ConfirmPaymentResponseDto,
+    description: 'Payment confirmed; booking is now COMPLETED',
+    type: CheckoutPaymentConfirmedResponseDto,
   })
   @ApiResponse({
     status: 409,
-    description: 'Reservation is not awaiting payment',
+    description: 'Reservation is not awaiting checkout payment',
   })
-  @ApiResponse({ status: 410, description: 'Reservation has expired' })
-  confirmPayment(@Param('id') id: string, @Req() req: Request) {
+  confirmCheckoutPayment(@Param('id') id: string, @Req() req: Request) {
     const user = req.user as AuthenticatedUser;
-    return this.reservationService.confirmPayment(id, user.userId);
+    return this.reservationService.confirmCheckoutPayment(id, user.userId);
   }
 
-  @Post(':id/payment/fail')
+  @Post(':id/checkout-payment/fail')
   @ApiOperation({
-    summary: 'Dummy payment failure callback',
+    summary: 'Dummy checkout payment failure callback',
     description:
-      'Simulates a failed payment: cancels the reservation and releases the slot.',
+      'Simulates a failed payment. The reservation stays PENDING_PAYMENT and the checkout QR ' +
+      'stays valid so staff can retry — the vehicle has not left, so nothing is released.',
   })
-  @ApiResponse({ status: 200, description: 'Reservation cancelled' })
+  @ApiResponse({
+    status: 200,
+    description: 'Payment marked FAILED; retry available',
+  })
   @ApiResponse({
     status: 409,
-    description: 'Reservation is not awaiting payment',
+    description: 'Reservation is not awaiting checkout payment',
   })
-  failPayment(
-    @Param('id') id: string,
-    @Req() req: Request,
-  ): Promise<Reservation> {
+  failCheckoutPayment(@Param('id') id: string, @Req() req: Request) {
     const user = req.user as AuthenticatedUser;
-    return this.reservationService.failPayment(id, user.userId);
+    return this.reservationService.failCheckoutPayment(id, user.userId);
   }
 }

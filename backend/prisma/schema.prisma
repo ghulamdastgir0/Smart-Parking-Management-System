@@ -25,12 +25,12 @@ enum SlotStatus {
 }
 
 enum ReservationStatus {
-  PENDING_PAYMENT
-  CONFIRMED
-  CHECKED_IN
-  COMPLETED
-  CANCELLED
-  EXPIRED
+  CONFIRMED // Reservation made, no payment collected yet; check-in QR issued
+  CHECKED_IN // Vehicle checked in; slot OCCUPIED
+  OVERTIME // Grace period expired with another reservation queued; flagged for staff
+  PENDING_PAYMENT // Checkout QR scanned, charge computed, awaiting dummy payment
+  COMPLETED // Checkout payment succeeded; slot released
+  CANCELLED // Auto-cancelled: no check-in within the check-in grace window
 }
 
 enum PaymentStatus {
@@ -49,6 +49,16 @@ enum QrCodeStatus {
   ACTIVE
   USED
   EXPIRED
+}
+
+enum ChallanType {
+  EXTENSION // Automatic 1-hour extension because no other reservation is queued
+  OVERTIME // Grace period expired while another reservation is queued for the slot
+}
+
+enum NotificationRecipientRole {
+  USER
+  MANAGER
 }
 
 model User {
@@ -111,10 +121,10 @@ model Reservation {
   userId       String
   lotId        String
   slotId       String
-  startTime    DateTime
-  endTime      DateTime
-  totalPrice   Decimal           @db.Decimal(10, 2)
-  status       ReservationStatus @default(PENDING_PAYMENT)
+  startTime    DateTime // Arrival time
+  endTime      DateTime // Expected checkout; pushed forward in place by auto-extensions
+  totalPrice   Decimal           @db.Decimal(10, 2) // Estimated base charge (hourly rate x reserved hours), fixed at creation
+  status       ReservationStatus @default(CONFIRMED)
   checkedInAt  DateTime?
   checkedOutAt DateTime?
   createdAt    DateTime          @default(now())
@@ -126,8 +136,9 @@ model Reservation {
   slot         ParkingSlot       @relation(fields: [slotId], references: [id])
   payment      Payment?
   qrCodes      QrCode[]
+  challans     Challan[]
 
-  @@index([startTime, endTime, status]) // Critical for double-booking check queries
+  @@index([startTime, endTime, status]) // Critical for overlap/double-booking check queries
 }
 
 model Payment {
@@ -186,4 +197,44 @@ model AuditLog {
 
   @@index([entityType, entityId])
   @@index([createdAt])
+}
+
+// One challan per (reservation, type, forCheckoutAt): `forCheckoutAt` snapshots the
+// `endTime` value the decision was made against, which both bills the correct amount and
+// makes the monitoring cron's extend/overtime decision idempotent across repeated ticks.
+model Challan {
+  id            String      @id @default(uuid())
+  reservationId String
+  type          ChallanType
+  amount        Decimal     @db.Decimal(10, 2)
+  reason        String?
+  forCheckoutAt DateTime
+  createdAt     DateTime    @default(now())
+
+  // Relations
+  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+
+  @@unique([reservationId, type, forCheckoutAt])
+  @@index([reservationId])
+}
+
+// Persisted in-app notification (no real email/SMS provider is wired up in this project —
+// this is the "dummy" channel, structured so a real one can be swapped in later, same as
+// the dummy payment flow). `forCheckoutAt` gives per-cycle reminders the same idempotency
+// key used by Challan; nullable because one-off notifications (e.g. RESERVATION_CONFIRMED)
+// don't belong to a checkout cycle.
+model Notification {
+  id            String                    @id @default(uuid())
+  recipientId   String
+  recipientRole NotificationRecipientRole
+  reservationId String?
+  type          String
+  title         String
+  message       String
+  metadata      Json?
+  forCheckoutAt DateTime?
+  createdAt     DateTime                  @default(now())
+
+  @@unique([recipientId, reservationId, type, forCheckoutAt])
+  @@index([recipientId, createdAt])
 }

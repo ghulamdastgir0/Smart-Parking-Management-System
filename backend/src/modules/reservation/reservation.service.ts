@@ -1,17 +1,16 @@
 import {
   ConflictException,
   ForbiddenException,
-  GoneException,
   Injectable,
-  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Cron, CronExpression } from '@nestjs/schedule';
 import {
+  NotificationRecipientRole,
   Payment,
   PaymentStatus,
   Prisma,
+  QrCodeStatus,
   QrCodeType,
   Reservation,
   ReservationStatus,
@@ -19,32 +18,40 @@ import {
   SlotStatus,
 } from '@prisma/client';
 import { AuditService } from '../../common/audit/audit.service';
+import { NotificationService } from '../../common/notification/notification.service';
 import { SlotUnavailableException } from '../../common/exceptions/slot-unavailable.exception';
 import { toQrCodeImage } from '../../common/qr/qr.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
+import { calculateBaseCharge } from './billing.util';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 
-const DEFAULT_PAYMENT_TIMEOUT_MINUTES = 15;
+export const DEFAULT_CHECKIN_GRACE_MINUTES = 60;
+export const DEFAULT_CHECKOUT_BUFFER_MINUTES = 30;
 
 @Injectable()
 export class ReservationService {
-  private readonly logger = new Logger(ReservationService.name);
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    private readonly notificationService: NotificationService,
     private readonly configService: ConfigService,
   ) {}
 
   async create(
     dto: CreateReservationDto,
     userId: string,
-  ): Promise<{ reservation: Reservation; payment: Payment }> {
-    const startTime = dto.startTime ? new Date(dto.startTime) : new Date();
-    const endTime = new Date(
-      startTime.getTime() + dto.durationMinutes * 60_000,
+  ): Promise<{
+    reservation: Reservation;
+    qrCodeToken: string;
+    qrCodeImage: string;
+  }> {
+    const arrivalTime = new Date(dto.arrivalTime);
+    const expectedCheckout = new Date(
+      arrivalTime.getTime() + dto.durationMinutes * 60_000,
     );
+    const bufferMs = this.getCheckoutBufferMinutes() * 60_000;
+    const blockEnd = new Date(expectedCheckout.getTime() + bufferMs);
 
     return this.prisma.$transaction(async (tx) => {
       const slot = await tx.parkingSlot.findUnique({
@@ -54,19 +61,29 @@ export class ReservationService {
         throw new NotFoundException(`Parking slot ${dto.slotId} not found`);
       }
 
-      // Conditional update guards against double-booking: this only succeeds if the slot
-      // is still AVAILABLE at the moment of the write, and Postgres serializes concurrent
-      // UPDATEs to the same row so a second racing request always sees count === 0.
-      const { count } = await tx.parkingSlot.updateMany({
-        where: { id: dto.slotId, status: SlotStatus.AVAILABLE },
-        data: { status: SlotStatus.RESERVED },
+      // Row-lock the slot so two concurrent reservation attempts for it serialize instead
+      // of both passing the overlap check before either commits.
+      await tx.$queryRaw`SELECT id FROM "ParkingSlot" WHERE id = ${dto.slotId} FOR UPDATE`;
+
+      // Interval overlap (buffer-inclusive): A overlaps B iff A.start < B.end AND A.end > B.start.
+      // "B.end" here is `existing.endTime + buffer`, rewritten as `existing.endTime >
+      // arrivalTime - buffer` so it stays a plain column comparison.
+      const overlapping = await tx.reservation.findFirst({
+        where: {
+          slotId: dto.slotId,
+          status: {
+            notIn: [ReservationStatus.CANCELLED, ReservationStatus.COMPLETED],
+          },
+          startTime: { lt: blockEnd },
+          endTime: { gt: new Date(arrivalTime.getTime() - bufferMs) },
+        },
       });
-      if (count === 0) {
+      if (overlapping) {
         throw new SlotUnavailableException(dto.slotId);
       }
 
-      const totalPrice = this.calculateTotalPrice(
-        slot.basePrice,
+      const totalPrice = calculateBaseCharge(
+        Number(slot.basePrice),
         dto.durationMinutes,
       );
 
@@ -75,18 +92,28 @@ export class ReservationService {
           userId,
           lotId: slot.lotId,
           slotId: slot.id,
-          startTime,
-          endTime,
+          startTime: arrivalTime,
+          endTime: expectedCheckout,
           totalPrice,
-          status: ReservationStatus.PENDING_PAYMENT,
+          status: ReservationStatus.CONFIRMED,
         },
       });
 
-      const payment = await tx.payment.create({
+      // Denormalized cache for fast search only — the interval check above is what actually
+      // prevents double-booking. Best-effort: a currently-OCCUPIED slot legitimately stays
+      // OCCUPIED even though this later, non-overlapping reservation was just accepted.
+      await tx.parkingSlot.updateMany({
+        where: { id: dto.slotId, status: SlotStatus.AVAILABLE },
+        data: { status: SlotStatus.RESERVED },
+      });
+
+      const qrCode = await tx.qrCode.create({
         data: {
           reservationId: reservation.id,
-          amount: totalPrice,
-          status: PaymentStatus.PENDING,
+          type: QrCodeType.CHECK_IN,
+          expiresAt: new Date(
+            arrivalTime.getTime() + this.getCheckinGraceMinutes() * 60_000,
+          ),
         },
       });
 
@@ -98,124 +125,31 @@ export class ReservationService {
           userId,
           metadata: {
             slotId: slot.id,
+            arrivalTime,
+            expectedCheckout,
             totalPrice,
-            durationMinutes: dto.durationMinutes,
           },
         },
         tx,
       );
 
-      return { reservation, payment };
-    });
-  }
-
-  async confirmPayment(
-    reservationId: string,
-    userId: string,
-  ): Promise<{
-    reservation: Reservation;
-    qrCodeToken: string;
-    qrCodeImage: string;
-  }> {
-    return this.prisma.$transaction(async (tx) => {
-      const reservation = await this.loadOwnedReservation(
-        tx,
-        reservationId,
-        userId,
-      );
-
-      if (reservation.status !== ReservationStatus.PENDING_PAYMENT) {
-        throw new ConflictException(
-          `Reservation is not awaiting payment (current status: ${reservation.status})`,
-        );
-      }
-      if (this.isPastPaymentWindow(reservation.createdAt)) {
-        throw new GoneException(
-          'This reservation has expired; please create a new one',
-        );
-      }
-
-      await tx.payment.update({
-        where: { reservationId },
-        data: { status: PaymentStatus.SUCCESSFUL, paidAt: new Date() },
-      });
-
-      const updatedReservation = await tx.reservation.update({
-        where: { id: reservationId },
-        data: { status: ReservationStatus.CONFIRMED },
-      });
-
-      const qrCode = await tx.qrCode.create({
-        data: {
-          reservationId,
-          type: QrCodeType.CHECK_IN,
-          expiresAt: reservation.endTime,
-        },
-      });
-
-      await this.auditService.log(
+      await this.notificationService.notify(
         {
-          entityType: 'Reservation',
-          entityId: reservationId,
-          action: 'PAYMENT_CONFIRMED',
-          userId,
+          recipientId: userId,
+          recipientRole: NotificationRecipientRole.USER,
+          type: 'RESERVATION_CONFIRMED',
+          title: 'Reservation confirmed',
+          message:
+            `Slot ${slot.slotNumber} is reserved from ${arrivalTime.toISOString()} to ${expectedCheckout.toISOString()}. ` +
+            `Check in within ${this.getCheckinGraceMinutes()} minutes of your arrival time or this reservation will be cancelled.`,
+          reservationId: reservation.id,
         },
         tx,
       );
 
       const qrCodeImage = await toQrCodeImage(qrCode.token);
 
-      return {
-        reservation: updatedReservation,
-        qrCodeToken: qrCode.token,
-        qrCodeImage,
-      };
-    });
-  }
-
-  async failPayment(
-    reservationId: string,
-    userId: string,
-  ): Promise<Reservation> {
-    return this.prisma.$transaction(async (tx) => {
-      const reservation = await this.loadOwnedReservation(
-        tx,
-        reservationId,
-        userId,
-      );
-
-      if (reservation.status !== ReservationStatus.PENDING_PAYMENT) {
-        throw new ConflictException(
-          `Reservation is not awaiting payment (current status: ${reservation.status})`,
-        );
-      }
-
-      await tx.payment.update({
-        where: { reservationId },
-        data: { status: PaymentStatus.FAILED },
-      });
-
-      const updated = await tx.reservation.update({
-        where: { id: reservationId },
-        data: { status: ReservationStatus.CANCELLED },
-      });
-
-      await tx.parkingSlot.update({
-        where: { id: reservation.slotId },
-        data: { status: SlotStatus.AVAILABLE },
-      });
-
-      await this.auditService.log(
-        {
-          entityType: 'Reservation',
-          entityId: reservationId,
-          action: 'PAYMENT_FAILED',
-          userId,
-        },
-        tx,
-      );
-
-      return updated;
+      return { reservation, qrCodeToken: qrCode.token, qrCodeImage };
     });
   }
 
@@ -249,59 +183,137 @@ export class ReservationService {
     return reservation;
   }
 
-  /**
-   * Sweeps reservations still PENDING_PAYMENT past the configurable timeout, releasing
-   * their slot and failing the payment so the slot is free for other customers again.
-   */
-  @Cron(CronExpression.EVERY_MINUTE)
-  async expireStalePendingReservations(): Promise<void> {
-    const cutoff = new Date(
-      Date.now() - this.getPaymentTimeoutMinutes() * 60_000,
-    );
+  async confirmCheckoutPayment(
+    reservationId: string,
+    userId: string,
+  ): Promise<{ reservation: Reservation; payment: Payment }> {
+    return this.prisma.$transaction(async (tx) => {
+      const reservation = await this.loadOwnedReservation(
+        tx,
+        reservationId,
+        userId,
+      );
+      if (reservation.status !== ReservationStatus.PENDING_PAYMENT) {
+        throw new ConflictException(
+          `Reservation is not awaiting checkout payment (current status: ${reservation.status})`,
+        );
+      }
 
-    const staleReservations = await this.prisma.reservation.findMany({
-      where: {
-        status: ReservationStatus.PENDING_PAYMENT,
-        createdAt: { lt: cutoff },
-      },
-    });
+      const payment = await tx.payment.update({
+        where: { reservationId },
+        data: { status: PaymentStatus.SUCCESSFUL, paidAt: new Date() },
+      });
 
-    for (const reservation of staleReservations) {
-      await this.prisma.$transaction(async (tx) => {
-        await tx.reservation.update({
-          where: { id: reservation.id },
-          data: { status: ReservationStatus.EXPIRED },
-        });
+      const updatedReservation = await tx.reservation.update({
+        where: { id: reservationId },
+        data: { status: ReservationStatus.COMPLETED },
+      });
 
-        await tx.parkingSlot.updateMany({
-          where: { id: reservation.slotId, status: SlotStatus.RESERVED },
-          data: { status: SlotStatus.AVAILABLE },
-        });
+      await tx.qrCode.updateMany({
+        where: {
+          reservationId,
+          type: QrCodeType.CHECK_OUT,
+          status: QrCodeStatus.ACTIVE,
+        },
+        data: { status: QrCodeStatus.USED, usedAt: new Date() },
+      });
 
-        await tx.payment.updateMany({
-          where: {
-            reservationId: reservation.id,
-            status: PaymentStatus.PENDING,
-          },
-          data: { status: PaymentStatus.FAILED },
-        });
+      const slot = await tx.parkingSlot.update({
+        where: { id: reservation.slotId },
+        data: { status: SlotStatus.AVAILABLE },
+      });
 
-        await this.auditService.log(
+      await this.auditService.log(
+        {
+          entityType: 'Reservation',
+          entityId: reservationId,
+          action: 'CHECKOUT_PAYMENT_CONFIRMED',
+          userId,
+        },
+        tx,
+      );
+
+      await this.notificationService.notify(
+        {
+          recipientId: userId,
+          recipientRole: NotificationRecipientRole.USER,
+          type: 'PAYMENT_COMPLETED',
+          title: 'Payment successful',
+          message: `Your payment of ${payment.amount.toString()} was successful.`,
+          reservationId,
+        },
+        tx,
+      );
+      await this.notificationService.notify(
+        {
+          recipientId: userId,
+          recipientRole: NotificationRecipientRole.USER,
+          type: 'CHECKOUT_SUCCESS',
+          title: 'Checkout complete',
+          message:
+            'You have successfully checked out. Thanks for parking with us!',
+          reservationId,
+        },
+        tx,
+      );
+
+      const lot = await tx.parkingLot.findUnique({
+        where: { id: reservation.lotId },
+      });
+      if (lot) {
+        await this.notificationService.notify(
           {
-            entityType: 'Reservation',
-            entityId: reservation.id,
-            action: 'RESERVATION_EXPIRED',
+            recipientId: lot.managerId,
+            recipientRole: NotificationRecipientRole.MANAGER,
+            type: 'CHECKOUT_COMPLETED',
+            title: 'Vehicle checked out',
+            message: `Slot ${slot.slotNumber} at ${lot.name} is now available again.`,
+            reservationId,
           },
           tx,
         );
-      });
-    }
+      }
 
-    if (staleReservations.length > 0) {
-      this.logger.log(
-        `Expired ${staleReservations.length} stale pending-payment reservation(s)`,
+      return { reservation: updatedReservation, payment };
+    });
+  }
+
+  async failCheckoutPayment(
+    reservationId: string,
+    userId: string,
+  ): Promise<Payment> {
+    return this.prisma.$transaction(async (tx) => {
+      const reservation = await this.loadOwnedReservation(
+        tx,
+        reservationId,
+        userId,
       );
-    }
+      if (reservation.status !== ReservationStatus.PENDING_PAYMENT) {
+        throw new ConflictException(
+          `Reservation is not awaiting checkout payment (current status: ${reservation.status})`,
+        );
+      }
+
+      const payment = await tx.payment.update({
+        where: { reservationId },
+        data: { status: PaymentStatus.FAILED },
+      });
+
+      await this.auditService.log(
+        {
+          entityType: 'Reservation',
+          entityId: reservationId,
+          action: 'CHECKOUT_PAYMENT_FAILED',
+          userId,
+        },
+        tx,
+      );
+
+      // Deliberately leave the reservation in PENDING_PAYMENT and the slot/QR untouched —
+      // the vehicle hasn't left, so staff just retries the dummy payment (mirrors how a
+      // real gateway failure would be handled: retry, don't unwind the checkout).
+      return payment;
+    });
   }
 
   private async loadOwnedReservation(
@@ -321,25 +333,17 @@ export class ReservationService {
     return reservation;
   }
 
-  private calculateTotalPrice(
-    basePrice: Prisma.Decimal,
-    durationMinutes: number,
-  ): number {
-    const hourlyRate = Number(basePrice);
-    return Math.round(hourlyRate * (durationMinutes / 60) * 100) / 100;
-  }
-
-  private isPastPaymentWindow(createdAt: Date): boolean {
-    return (
-      Date.now() - createdAt.getTime() >
-      this.getPaymentTimeoutMinutes() * 60_000
+  private getCheckinGraceMinutes(): number {
+    return this.configService.get<number>(
+      'RESERVATION_CHECKIN_GRACE_MINUTES',
+      DEFAULT_CHECKIN_GRACE_MINUTES,
     );
   }
 
-  private getPaymentTimeoutMinutes(): number {
+  private getCheckoutBufferMinutes(): number {
     return this.configService.get<number>(
-      'RESERVATION_PAYMENT_TIMEOUT_MINUTES',
-      DEFAULT_PAYMENT_TIMEOUT_MINUTES,
+      'CHECKOUT_GRACE_BUFFER_MINUTES',
+      DEFAULT_CHECKOUT_BUFFER_MINUTES,
     );
   }
 }

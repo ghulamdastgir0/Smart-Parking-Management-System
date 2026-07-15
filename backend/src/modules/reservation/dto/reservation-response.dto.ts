@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PaymentStatus, ReservationStatus } from '@prisma/client';
+import { ChallanType, PaymentStatus, ReservationStatus } from '@prisma/client';
 
 export class ReservationResponseDto {
   @ApiProperty()
@@ -14,13 +14,19 @@ export class ReservationResponseDto {
   @ApiProperty()
   slotId!: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Arrival time' })
   startTime!: Date;
 
-  @ApiProperty()
+  @ApiProperty({
+    description:
+      'Expected checkout time — pushed forward in place by auto-extensions',
+  })
   endTime!: Date;
 
-  @ApiProperty()
+  @ApiProperty({
+    description:
+      'Estimated base charge (hourly rate × reserved hours), fixed at creation',
+  })
   totalPrice!: string;
 
   @ApiProperty({ enum: ReservationStatus })
@@ -31,6 +37,20 @@ export class ReservationResponseDto {
 
   @ApiPropertyOptional()
   checkedOutAt?: Date | null;
+}
+
+export class ChallanResponseDto {
+  @ApiProperty({ enum: ChallanType })
+  type!: ChallanType;
+
+  @ApiProperty()
+  amount!: string;
+
+  @ApiPropertyOptional()
+  reason?: string | null;
+
+  @ApiProperty()
+  createdAt!: Date;
 }
 
 export class PaymentResponseDto {
@@ -49,18 +69,6 @@ export class CreateReservationResponseDto {
   reservation!: ReservationResponseDto;
 
   @ApiProperty({
-    type: PaymentResponseDto,
-    description:
-      'Hand this payment id to the dummy payment flow, then call payment/confirm or payment/fail',
-  })
-  payment!: PaymentResponseDto;
-}
-
-export class ConfirmPaymentResponseDto {
-  @ApiProperty({ type: ReservationResponseDto })
-  reservation!: ReservationResponseDto;
-
-  @ApiProperty({
     description:
       'Single-use check-in QR token — present it at the parking entrance',
   })
@@ -70,4 +78,27 @@ export class ConfirmPaymentResponseDto {
     description: 'Base64 PNG data URI rendering of the check-in QR code',
   })
   qrCodeImage!: string;
+}
+
+export class CheckoutInitiatedResponseDto {
+  @ApiProperty({ type: ReservationResponseDto })
+  reservation!: ReservationResponseDto;
+
+  @ApiProperty({
+    type: PaymentResponseDto,
+    description:
+      'Final amount due (base charge + extension/overtime challans). Present the dummy payment screen next.',
+  })
+  payment!: PaymentResponseDto;
+
+  @ApiProperty({ type: [ChallanResponseDto] })
+  challans!: ChallanResponseDto[];
+}
+
+export class CheckoutPaymentConfirmedResponseDto {
+  @ApiProperty({ type: ReservationResponseDto })
+  reservation!: ReservationResponseDto;
+
+  @ApiProperty({ type: PaymentResponseDto })
+  payment!: PaymentResponseDto;
 }

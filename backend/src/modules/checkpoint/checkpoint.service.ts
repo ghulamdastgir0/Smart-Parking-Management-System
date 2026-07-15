@@ -6,6 +6,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  NotificationRecipientRole,
+  Payment,
+  PaymentStatus,
   Prisma,
   QrCode,
   QrCodeStatus,
@@ -15,8 +18,11 @@ import {
   SlotStatus,
 } from '@prisma/client';
 import { AuditService } from '../../common/audit/audit.service';
+import { NotificationService } from '../../common/notification/notification.service';
 import { toQrCodeImage } from '../../common/qr/qr.util';
 import { PrismaService } from '../../prisma/prisma.service';
+import { BillingService } from '../reservation/billing.service';
+import { ChallanResponseDto } from '../reservation/dto/reservation-response.dto';
 
 type QrCodeWithReservation = QrCode & { reservation: Reservation };
 
@@ -25,6 +31,8 @@ export class CheckpointService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    private readonly notificationService: NotificationService,
+    private readonly billingService: BillingService,
   ) {}
 
   async checkIn(
@@ -74,6 +82,18 @@ export class CheckpointService {
         tx,
       );
 
+      await this.notificationService.notify(
+        {
+          recipientId: reservation.userId,
+          recipientRole: NotificationRecipientRole.USER,
+          type: 'CHECKIN_SUCCESS',
+          title: 'Checked in',
+          message: 'You have successfully checked in. Enjoy your stay!',
+          reservationId: reservation.id,
+        },
+        tx,
+      );
+
       const checkoutQrCodeImage = await toQrCodeImage(checkoutQr.token);
 
       return {
@@ -84,10 +104,20 @@ export class CheckpointService {
     });
   }
 
+  /**
+   * Scans the checkout QR, records the checkout timestamp, and computes the final charge —
+   * but does NOT invalidate the QR, mark the reservation COMPLETED, or release the slot yet.
+   * Those happen only once the dummy payment succeeds (see ReservationService.confirmCheckoutPayment),
+   * so a failed/abandoned payment can be retried against the same scan without a new QR.
+   */
   async checkOut(
     token: string,
     staffUserId: string,
-  ): Promise<{ reservation: Reservation }> {
+  ): Promise<{
+    reservation: Reservation;
+    payment: Payment;
+    challans: ChallanResponseDto[];
+  }> {
     return this.prisma.$transaction(async (tx) => {
       const qrCode = await this.loadValidQrCode(
         tx,
@@ -96,25 +126,41 @@ export class CheckpointService {
       );
       const { reservation } = qrCode;
 
-      if (reservation.status !== ReservationStatus.CHECKED_IN) {
+      if (reservation.status === ReservationStatus.PENDING_PAYMENT) {
+        throw new ConflictException(
+          'Checkout was already initiated for this reservation; awaiting payment',
+        );
+      }
+      if (
+        reservation.status !== ReservationStatus.CHECKED_IN &&
+        reservation.status !== ReservationStatus.OVERTIME
+      ) {
         throw new ConflictException(
           `Reservation is not checked in (current status: ${reservation.status})`,
         );
       }
 
-      await tx.qrCode.update({
-        where: { id: qrCode.id },
-        data: { status: QrCodeStatus.USED, usedAt: new Date() },
-      });
-
+      const checkedOutAt = new Date();
       const updatedReservation = await tx.reservation.update({
         where: { id: reservation.id },
-        data: { status: ReservationStatus.COMPLETED, checkedOutAt: new Date() },
+        data: { status: ReservationStatus.PENDING_PAYMENT, checkedOutAt },
       });
 
-      await tx.parkingSlot.update({
-        where: { id: reservation.slotId },
-        data: { status: SlotStatus.AVAILABLE },
+      const totalCharge = await this.billingService.calculateFinalCharge(
+        updatedReservation,
+        tx,
+      );
+
+      const payment = await tx.payment.create({
+        data: {
+          reservationId: reservation.id,
+          amount: totalCharge,
+          status: PaymentStatus.PENDING,
+        },
+      });
+
+      const challans = await tx.challan.findMany({
+        where: { reservationId: reservation.id },
       });
 
       await this.auditService.log(
@@ -123,11 +169,33 @@ export class CheckpointService {
           entityId: reservation.id,
           action: 'CHECKED_OUT',
           userId: staffUserId,
+          metadata: { checkedOutAt, totalCharge },
         },
         tx,
       );
 
-      return { reservation: updatedReservation };
+      await this.notificationService.notify(
+        {
+          recipientId: reservation.userId,
+          recipientRole: NotificationRecipientRole.USER,
+          type: 'CHECKOUT_INITIATED',
+          title: 'Checkout started — payment due',
+          message: `Your final parking charge is ${totalCharge}. Please complete payment to finish checking out.`,
+          reservationId: reservation.id,
+        },
+        tx,
+      );
+
+      return {
+        reservation: updatedReservation,
+        payment,
+        challans: challans.map((challan) => ({
+          type: challan.type,
+          amount: challan.amount.toString(),
+          reason: challan.reason,
+          createdAt: challan.createdAt,
+        })),
+      };
     });
   }
 
