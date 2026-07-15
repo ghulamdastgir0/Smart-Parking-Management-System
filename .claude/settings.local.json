@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx --yes @nestjs/cli@latest new backend --package-manager npm --skip-git)",
+      "Bash(DATABASE_URL=\"postgresql://testuser@localhost:5544/smart_parking_test?schema=public\" npx prisma migrate dev --name init --skip-generate)"
+    ]
+  }
+}

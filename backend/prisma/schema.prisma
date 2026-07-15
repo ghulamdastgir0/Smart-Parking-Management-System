@@ -40,6 +40,17 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum QrCodeType {
+  CHECK_IN
+  CHECK_OUT
+}
+
+enum QrCodeStatus {
+  ACTIVE
+  USED
+  EXPIRED
+}
+
 model User {
   id           String        @id @default(uuid())
   email        String        @unique
@@ -64,6 +75,8 @@ model ParkingLot {
   latitude    Float // For Leaflet / OpenStreetMap searches
   longitude   Float
   managerId   String
+  rows        Int // Parking layout: number of row bands (A, B, C, ...)
+  columns     Int // Parking layout: slots per row (1..columns)
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
@@ -102,7 +115,6 @@ model Reservation {
   endTime      DateTime
   totalPrice   Decimal           @db.Decimal(10, 2)
   status       ReservationStatus @default(PENDING_PAYMENT)
-  qrCodeToken  String            @unique @default(uuid()) // Scanned on Check-In/Out
   checkedInAt  DateTime?
   checkedOutAt DateTime?
   createdAt    DateTime          @default(now())
@@ -113,6 +125,7 @@ model Reservation {
   lot          ParkingLot        @relation(fields: [lotId], references: [id])
   slot         ParkingSlot       @relation(fields: [slotId], references: [id])
   payment      Payment?
+  qrCodes      QrCode[]
 
   @@index([startTime, endTime, status]) // Critical for double-booking check queries
 }
@@ -141,4 +154,36 @@ model OccupancyLog {
   lot           ParkingLot @relation(fields: [lotId], references: [id], onDelete: Cascade)
 
   @@index([lotId, timestamp]) // Optimized for Analytics Dashboard timeline queries
+}
+
+model QrCode {
+  id            String       @id @default(uuid())
+  reservationId String
+  type          QrCodeType
+  token         String       @unique @default(uuid())
+  status        QrCodeStatus @default(ACTIVE)
+  expiresAt     DateTime? // null = no expiry (e.g. check-out codes: late exits must still work)
+  usedAt        DateTime?
+  createdAt     DateTime     @default(now())
+
+  // Relations
+  reservation   Reservation  @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+
+  @@index([reservationId, type])
+}
+
+// Append-only audit trail. Deliberately has no FK to User: audit rows must outlive/ignore
+// changes to the entities they describe, and `userId` is null for system-initiated actions
+// (e.g. the unpaid-reservation expiry sweep).
+model AuditLog {
+  id         String   @id @default(uuid())
+  entityType String
+  entityId   String
+  action     String
+  metadata   Json?
+  userId     String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
 }
