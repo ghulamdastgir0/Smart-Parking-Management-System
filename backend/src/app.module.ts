@@ -11,6 +11,7 @@ import { NotificationHttpModule } from './modules/notification/notification.modu
 import { ParkingLotModule } from './modules/parking-lot/parking-lot.module';
 import { ParkingSlotModule } from './modules/parking-slot/parking-slot.module';
 import { ReservationModule } from './modules/reservation/reservation.module';
+import { UsersModule } from './modules/users/users.module';
 import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
@@ -21,6 +22,7 @@ import { PrismaModule } from './prisma/prisma.module';
     AuditModule,
     NotificationModule,
     AuthModule,
+    UsersModule,
     ParkingLotModule,
     ParkingSlotModule,
     ReservationModule,
