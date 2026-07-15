@@ -1,0 +1,144 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  CUSTOMER
+}
+
+enum SlotType {
+  STANDARD
+  LARGE
+}
+
+enum SlotStatus {
+  AVAILABLE
+  RESERVED
+  OCCUPIED
+  MAINTENANCE
+}
+
+enum ReservationStatus {
+  PENDING_PAYMENT
+  CONFIRMED
+  CHECKED_IN
+  COMPLETED
+  CANCELLED
+  EXPIRED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESSFUL
+  FAILED
+  REFUNDED
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  password     String // Bcrypt hash
+  firstName    String
+  lastName     String
+  role         Role          @default(CUSTOMER)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  // Relations
+  managedLots  ParkingLot[]  @relation("ManagerLots")
+  reservations Reservation[]
+
+  @@index([email])
+}
+
+model ParkingLot {
+  id          String         @id @default(uuid())
+  name        String
+  address     String
+  latitude    Float // For Leaflet / OpenStreetMap searches
+  longitude   Float
+  managerId   String
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  // Relations
+  manager       User           @relation("ManagerLots", fields: [managerId], references: [id])
+  slots         ParkingSlot[]
+  reservations  Reservation[]
+  occupancyLogs OccupancyLog[]
+
+  @@index([latitude, longitude]) // Fast geospatial bounds filtering
+}
+
+model ParkingSlot {
+  id           String        @id @default(uuid())
+  lotId        String
+  slotNumber   String // e.g., "A-10", "B-05"
+  type         SlotType      @default(STANDARD)
+  status       SlotStatus    @default(AVAILABLE)
+  basePrice    Decimal       @db.Decimal(10, 2) // Support dynamic pricing updates
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  // Relations
+  lot          ParkingLot    @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  reservations Reservation[]
+
+  @@unique([lotId, slotNumber]) // Prevents creating duplicate slots in the same lot
+}
+
+model Reservation {
+  id           String            @id @default(uuid())
+  userId       String
+  lotId        String
+  slotId       String
+  startTime    DateTime
+  endTime      DateTime
+  totalPrice   Decimal           @db.Decimal(10, 2)
+  status       ReservationStatus @default(PENDING_PAYMENT)
+  qrCodeToken  String            @unique @default(uuid()) // Scanned on Check-In/Out
+  checkedInAt  DateTime?
+  checkedOutAt DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  // Relations
+  user         User              @relation(fields: [userId], references: [id])
+  lot          ParkingLot        @relation(fields: [lotId], references: [id])
+  slot         ParkingSlot       @relation(fields: [slotId], references: [id])
+  payment      Payment?
+
+  @@index([startTime, endTime, status]) // Critical for double-booking check queries
+}
+
+model Payment {
+  id              String        @id @default(uuid())
+  reservationId   String        @unique
+  amount          Decimal       @db.Decimal(10, 2)
+  status          PaymentStatus @default(PENDING)
+  stripePaymentId String?       @unique // References Stripe Sandbox transaction ID
+  paidAt          DateTime?
+  createdAt       DateTime      @default(now())
+
+  // Relations
+  reservation     Reservation   @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+}
+
+model OccupancyLog {
+  id            String     @id @default(uuid())
+  lotId         String
+  timestamp     DateTime   @default(now())
+  occupiedSlots Int
+  totalSlots    Int
+
+  // Relations
+  lot           ParkingLot @relation(fields: [lotId], references: [id], onDelete: Cascade)
+
+  @@index([lotId, timestamp]) // Optimized for Analytics Dashboard timeline queries
+}
