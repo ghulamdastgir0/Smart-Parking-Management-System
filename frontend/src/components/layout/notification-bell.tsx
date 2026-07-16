@@ -17,13 +17,14 @@ import { NotificationIcon } from "@/features/notifications/notification-icon";
 export function NotificationBell() {
   const { data: notifications } = useMyNotifications();
   const markRead = useMarkNotificationsRead();
-  const recent = notifications?.slice(0, 6) ?? [];
-  const unreadCount = notifications?.filter((n) => !n.isRead).length ?? 0;
+  const unread = notifications?.filter((n) => !n.isRead) ?? [];
+  const recent = unread.slice(0, 6);
+  const unreadCount = unread.length;
 
   return (
     <DropdownMenu
       onOpenChange={(open) => {
-        if (open && unreadCount > 0) markRead.mutate();
+        if (!open && unreadCount > 0) markRead.mutate();
       }}
     >
       <DropdownMenuTrigger
@@ -49,7 +50,7 @@ export function NotificationBell() {
       <DropdownMenuContent align="end" className="w-80">
         {recent.length === 0 ? (
           <div className="p-4 text-center text-sm text-muted-foreground">
-            No notifications yet
+            No unread notifications
           </div>
         ) : (
           recent.map((n) => (

@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useRef } from "react";
-import { QRCodeSVG } from "qrcode.react";
+import { QRCodeCanvas } from "qrcode.react";
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -23,16 +23,12 @@ export function QrCode({
   const titleId = useId();
 
   function handleDownload() {
-    const svg = wrapperRef.current?.querySelector("svg");
-    if (!svg) return;
-    const serialized = new XMLSerializer().serializeToString(svg);
-    const blob = new Blob([serialized], { type: "image/svg+xml" });
-    const url = URL.createObjectURL(blob);
+    const canvas = wrapperRef.current?.querySelector("canvas");
+    if (!canvas) return;
     const a = document.createElement("a");
-    a.href = url;
-    a.download = `${fileName}.svg`;
+    a.href = canvas.toDataURL("image/png");
+    a.download = `${fileName}.png`;
     a.click();
-    URL.revokeObjectURL(url);
   }
 
   return (
@@ -44,11 +40,11 @@ export function QrCode({
           className,
         )}
       >
-        <QRCodeSVG
+        <QRCodeCanvas
           value={value}
           size={size}
           level="M"
-          marginSize={0}
+          marginSize={2}
           aria-labelledby={titleId}
           title={fileName}
         />

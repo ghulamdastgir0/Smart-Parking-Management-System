@@ -48,8 +48,9 @@ export function QrScanner({
     queueRef.current = queueRef.current.then(async () => {
       if (cancelled) return;
       scanner = new Html5Qrcode(elementId);
+      const activeScanner = scanner;
       try {
-        await scanner.start(
+        await activeScanner.start(
           { facingMode: "environment" },
           {
             fps: 10,
@@ -66,6 +67,17 @@ export function QrScanner({
           },
           undefined,
         );
+        // Devices without a rear camera silently fall back to the front one, whose live
+        // preview browsers show mirrored (selfie-style) — flip it back so the operator sees
+        // a normal, non-mirrored view while aiming at a code. A true "environment" camera is
+        // never mirrored, so this only ever applies to that fallback.
+        if (!cancelled) {
+          const isFrontFacing = activeScanner.getRunningTrackSettings().facingMode === "user";
+          const videoEl = document.getElementById(elementId)?.querySelector("video");
+          if (videoEl) {
+            videoEl.style.transform = isFrontFacing ? "scaleX(-1)" : "";
+          }
+        }
       } catch {
         // Camera unavailable/denied — the manual token entry fallback still works.
       }
