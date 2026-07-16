@@ -4,6 +4,7 @@ import { decodeToken, isTokenExpired } from "@/lib/jwt";
 const PUBLIC_PATHS = ["/login", "/register"];
 const STAFF_ONLY_PREFIXES = ["/admin", "/checkpoint"];
 const ADMIN_ONLY_PREFIXES = ["/admin/users"];
+const CUSTOMER_ONLY_PREFIXES = ["/nearby"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -35,6 +36,13 @@ export function middleware(request: NextRequest) {
   if (
     STAFF_ONLY_PREFIXES.some((p) => pathname.startsWith(p)) &&
     role === "CUSTOMER"
+  ) {
+    return NextResponse.redirect(new URL("/unauthorized", request.url));
+  }
+
+  if (
+    CUSTOMER_ONLY_PREFIXES.some((p) => pathname.startsWith(p)) &&
+    role !== "CUSTOMER"
   ) {
     return NextResponse.redirect(new URL("/unauthorized", request.url));
   }

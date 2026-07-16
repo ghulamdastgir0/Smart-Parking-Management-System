@@ -19,4 +19,9 @@ export class UserResponseDto {
 
   @ApiProperty()
   createdAt!: Date;
+
+  @ApiProperty({
+    description: 'Whether this user has a saved payment method on file',
+  })
+  hasPaymentMethod!: boolean;
 }

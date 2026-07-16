@@ -25,6 +25,12 @@ const PAGE_SIZE = 9;
 
 type SortKey = "name" | "price" | "availability";
 
+const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: "name", label: "Name" },
+  { value: "price", label: "Price (lowest)" },
+  { value: "availability", label: "Availability" },
+];
+
 export default function ParkingLotsPage() {
   const { data: lots, isLoading, isError, error, refetch } = useParkingLots();
   const [search, setSearch] = useState("");
@@ -72,14 +78,20 @@ export default function ParkingLotsPage() {
             }}
           />
         </div>
-        <Select value={sort} onValueChange={(v) => v && setSort(v as SortKey)}>
+        <Select
+          value={sort}
+          onValueChange={(v) => v && setSort(v as SortKey)}
+          items={SORT_OPTIONS}
+        >
           <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder="Sort by" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="name">Name</SelectItem>
-            <SelectItem value="price">Price (lowest)</SelectItem>
-            <SelectItem value="availability">Availability</SelectItem>
+            {SORT_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>

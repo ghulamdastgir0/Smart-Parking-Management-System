@@ -20,7 +20,12 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/nearby", label: "Nearby Parking", icon: MapPin },
+  {
+    href: "/nearby",
+    label: "Nearby Parking",
+    icon: MapPin,
+    roles: ["CUSTOMER"],
+  },
   { href: "/parking-lots", label: "Parking Lots", icon: Building2 },
   {
     href: "/reservations",

@@ -1,15 +1,31 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { useAuth } from "@/features/auth/auth-provider";
 import { BottomNav } from "./bottom-nav";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { isLoading, isAuthenticated } = useAuth();
+  const { user, isLoading, isAuthenticated } = useAuth();
+  const pathname = usePathname();
+  const router = useRouter();
 
-  if (isLoading || !isAuthenticated) {
+  // Customers must have a payment method on file before using the rest of the app — checkout
+  // charges it automatically, so there's nothing to bill without one.
+  const needsBilling =
+    isAuthenticated &&
+    user?.role === "CUSTOMER" &&
+    !user.hasPaymentMethod &&
+    pathname !== "/complete-profile";
+
+  useEffect(() => {
+    if (needsBilling) router.push("/complete-profile");
+  }, [needsBilling, router]);
+
+  if (isLoading || !isAuthenticated || needsBilling) {
     return (
       <div className="flex min-h-svh items-center justify-center">
         <Loader2 className="size-6 animate-spin text-muted-foreground" />

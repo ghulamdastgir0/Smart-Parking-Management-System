@@ -172,7 +172,7 @@ const LocationPickerMap = dynamic(
 const schema = z.object({
   name: z.string().min(1, "Name is required"),
   address: z.string().min(1, "Address is required"),
-  managerId: z.string().optional(),
+  managerId: z.string(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -195,7 +195,7 @@ export default function EditParkingLotPage({
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: "", address: "" },
+    defaultValues: { name: "", address: "", managerId: "" },
   });
 
   useEffect(() => {
@@ -215,7 +215,7 @@ export default function EditParkingLotPage({
         address: values.address,
         latitude: position[0],
         longitude: position[1],
-        managerId: user?.role === "ADMIN" ? values.managerId : undefined,
+        managerId: user?.role === "ADMIN" && values.managerId ? values.managerId : undefined,
       },
       { onSuccess: () => router.push("/admin/parking-lots") },
     );
@@ -272,10 +272,17 @@ export default function EditParkingLotPage({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Assign Manager</FormLabel>
-                      <Select value={field.value} onValueChange={field.onChange}>
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        items={managers.map((m) => ({
+                          value: m.id,
+                          label: `${m.firstName} ${m.lastName}`,
+                        }))}
+                      >
                         <FormControl>
                           <SelectTrigger className="w-full">
-                            <SelectValue />
+                            <SelectValue placeholder="Select a manager" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>

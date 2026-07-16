@@ -287,6 +287,10 @@ export default function BookingPage({
                 <Select
                   value={String(values.durationMinutes)}
                   onValueChange={(v) => form.setValue("durationMinutes", Number(v))}
+                  items={DURATION_PRESETS.map((mins) => ({
+                    value: String(mins),
+                    label: formatDuration(mins),
+                  }))}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue />

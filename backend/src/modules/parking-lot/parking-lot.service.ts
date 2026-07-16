@@ -121,18 +121,7 @@ export class ParkingLotService {
     dto: CreateFloorInputDto,
     requestingUser: AuthenticatedUser,
   ): Promise<ParkingFloorResponseDto> {
-    const lot = await this.prisma.parkingLot.findUnique({
-      where: { id: lotId },
-    });
-    if (!lot) {
-      throw new NotFoundException(`Parking lot ${lotId} not found`);
-    }
-    if (
-      requestingUser.role === Role.MANAGER &&
-      lot.managerId !== requestingUser.userId
-    ) {
-      throw new ForbiddenException('You do not manage this parking lot');
-    }
+    await this.assertManagerOwnsLot(lotId, requestingUser);
 
     const totalSlots = dto.rows * dto.columns;
     if (totalSlots > MAX_TOTAL_SLOTS) {
@@ -359,14 +348,45 @@ export class ParkingLotService {
     return this.mergeEnrichment(lot, availability, totalSlots);
   }
 
-  async update(id: string, dto: UpdateParkingLotDto): Promise<ParkingLot> {
-    await this.findOne(id);
-    return this.prisma.parkingLot.update({ where: { id }, data: dto });
+  async update(
+    id: string,
+    dto: UpdateParkingLotDto,
+    requestingUser: AuthenticatedUser,
+  ): Promise<ParkingLot> {
+    const lot = await this.assertManagerOwnsLot(id, requestingUser);
+
+    const data = { ...dto };
+    if (requestingUser.role === Role.MANAGER) {
+      // Only an admin may reassign a lot to a different manager.
+      delete data.managerId;
+    }
+
+    return this.prisma.parkingLot.update({ where: { id: lot.id }, data });
   }
 
-  async remove(id: string): Promise<ParkingLot> {
-    await this.findOne(id);
-    return this.prisma.parkingLot.delete({ where: { id } });
+  async remove(
+    id: string,
+    requestingUser: AuthenticatedUser,
+  ): Promise<ParkingLot> {
+    const lot = await this.assertManagerOwnsLot(id, requestingUser);
+    return this.prisma.parkingLot.delete({ where: { id: lot.id } });
+  }
+
+  private async assertManagerOwnsLot(
+    id: string,
+    requestingUser: AuthenticatedUser,
+  ): Promise<ParkingLot> {
+    const lot = await this.prisma.parkingLot.findUnique({ where: { id } });
+    if (!lot) {
+      throw new NotFoundException(`Parking lot ${id} not found`);
+    }
+    if (
+      requestingUser.role === Role.MANAGER &&
+      lot.managerId !== requestingUser.userId
+    ) {
+      throw new ForbiddenException('You do not manage this parking lot');
+    }
+    return lot;
   }
 
   /**

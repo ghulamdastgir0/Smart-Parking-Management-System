@@ -46,12 +46,14 @@ export class AuthService {
       user.firstName,
       user.lastName,
       user.role,
+      false, // a brand-new account never has a payment method on file yet
     );
   }
 
   async login(dto: LoginDto): Promise<AuthResponseDto> {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
+      include: { paymentMethod: { select: { id: true } } },
     });
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
@@ -68,6 +70,7 @@ export class AuthService {
       user.firstName,
       user.lastName,
       user.role,
+      user.paymentMethod !== null,
     );
   }
 
@@ -77,12 +80,13 @@ export class AuthService {
     firstName: string,
     lastName: string,
     role: Role,
+    hasPaymentMethod: boolean,
   ): AuthResponseDto {
     const payload: JwtPayload = { sub: id, email, role };
 
     return {
       accessToken: this.jwtService.sign(payload),
-      user: { id, email, firstName, lastName, role },
+      user: { id, email, firstName, lastName, role, hasPaymentMethod },
     };
   }
 }

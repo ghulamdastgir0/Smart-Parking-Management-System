@@ -111,25 +111,36 @@ export class ParkingLotController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.MANAGER)
-  @ApiOperation({ summary: 'Update a parking lot (Admin/Manager only)' })
+  @ApiOperation({
+    summary: 'Update a parking lot (Admin/Manager only)',
+    description: 'Managers may only update lots they manage.',
+  })
   @ApiResponse({ status: 200, description: 'Parking lot updated' })
+  @ApiResponse({ status: 403, description: 'Manager does not own this lot' })
   @ApiResponse({ status: 404, description: 'Parking lot not found' })
   update(
     @Param('id') id: string,
     @Body() dto: UpdateParkingLotDto,
+    @Req() req: Request,
   ): Promise<ParkingLot> {
-    return this.parkingLotService.update(id, dto);
+    const user = req.user as AuthenticatedUser;
+    return this.parkingLotService.update(id, dto, user);
   }
 
   @Delete(':id')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.MANAGER)
-  @ApiOperation({ summary: 'Delete a parking lot (Admin/Manager only)' })
+  @ApiOperation({
+    summary: 'Delete a parking lot (Admin/Manager only)',
+    description: 'Managers may only delete lots they manage.',
+  })
   @ApiResponse({ status: 200, description: 'Parking lot deleted' })
+  @ApiResponse({ status: 403, description: 'Manager does not own this lot' })
   @ApiResponse({ status: 404, description: 'Parking lot not found' })
-  remove(@Param('id') id: string): Promise<ParkingLot> {
-    return this.parkingLotService.remove(id);
+  remove(@Param('id') id: string, @Req() req: Request): Promise<ParkingLot> {
+    const user = req.user as AuthenticatedUser;
+    return this.parkingLotService.remove(id, user);
   }
 
   @Get(':lotId/floors')

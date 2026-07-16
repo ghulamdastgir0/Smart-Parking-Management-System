@@ -16,3 +16,23 @@ export interface CreateUserPayload {
   lastName: string;
   role: Role;
 }
+
+export interface ChangePasswordPayload {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface PaymentMethod {
+  cardholderName: string;
+  brand: string;
+  last4: string;
+  expiryMonth: number;
+  expiryYear: number;
+}
+
+export interface SavePaymentMethodPayload {
+  cardholderName: string;
+  cardNumber: string;
+  expiryMonth: number;
+  expiryYear: number;
+}

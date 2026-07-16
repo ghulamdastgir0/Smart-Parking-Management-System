@@ -84,4 +84,11 @@ export class NotificationService {
       orderBy: { createdAt: 'desc' },
     });
   }
+
+  async markAllRead(recipientId: string): Promise<void> {
+    await this.prisma.notification.updateMany({
+      where: { recipientId, isRead: false },
+      data: { isRead: true },
+    });
+  }
 }

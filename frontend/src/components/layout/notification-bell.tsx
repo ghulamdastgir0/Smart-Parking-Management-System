@@ -11,17 +11,21 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useMyNotifications } from "@/features/notifications/hooks";
+import { useMarkNotificationsRead, useMyNotifications } from "@/features/notifications/hooks";
 import { NotificationIcon } from "@/features/notifications/notification-icon";
 
 export function NotificationBell() {
   const { data: notifications } = useMyNotifications();
+  const markRead = useMarkNotificationsRead();
   const recent = notifications?.slice(0, 6) ?? [];
-  // The backend has no read/unread state on notifications, so the badge shows the total count.
-  const unreadCount = notifications?.length ?? 0;
+  const unreadCount = notifications?.filter((n) => !n.isRead).length ?? 0;
 
   return (
-    <DropdownMenu>
+    <DropdownMenu
+      onOpenChange={(open) => {
+        if (open && unreadCount > 0) markRead.mutate();
+      }}
+    >
       <DropdownMenuTrigger
         render={
           <Button

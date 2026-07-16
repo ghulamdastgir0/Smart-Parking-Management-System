@@ -25,4 +25,6 @@ export interface CheckOutResponse {
   reservation: CheckpointReservation;
   payment: Payment;
   challans: Challan[];
+  paymentFailed: boolean;
+  message: string;
 }

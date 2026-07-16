@@ -1,7 +1,6 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
 import {
   createContext,
   useCallback,
@@ -25,7 +24,6 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
-  const router = useRouter();
   const hasToken = typeof window !== "undefined" && Boolean(getAuthToken());
 
   const { data: user, isLoading } = useQuery({
@@ -38,6 +36,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const applySession = useCallback(
     (auth: AuthResponse) => {
+      // Cancel any request left over from a previous session (e.g. a still-in-flight
+      // /users/me fetch issued under the old token) so its late response can't overwrite
+      // the session we're about to apply with stale, wrong-user data.
+      void queryClient.cancelQueries({ queryKey: ["auth", "me"] });
       setAuthToken(auth.accessToken);
       queryClient.setQueryData(["auth", "me"], {
         ...auth.user,
@@ -48,11 +50,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(() => {
+    // Cancel in-flight requests before clearing so none of them can repopulate the cache
+    // with the outgoing user's data after the fact.
+    void queryClient.cancelQueries();
     clearAuthToken();
     queryClient.setQueryData(["auth", "me"], undefined);
     queryClient.clear();
-    router.push("/login");
-  }, [queryClient, router]);
+    // Full navigation, not router.push: Next's client-side router cache can otherwise
+    // restore a previously visited route's component tree as it was rendered for the last
+    // session once the next user logs in and navigates back to it. A hard navigation
+    // guarantees a completely fresh app boot for the next session.
+    window.location.href = "/login";
+  }, [queryClient]);
 
   const value = useMemo(
     () => ({

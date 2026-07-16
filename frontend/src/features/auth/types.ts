@@ -6,6 +6,7 @@ export interface AuthUser {
   firstName: string;
   lastName: string;
   role: Role;
+  hasPaymentMethod: boolean;
 }
 
 export interface AuthResponse {
@@ -32,4 +33,5 @@ export interface UserProfile {
   lastName: string;
   role: Role;
   createdAt: string;
+  hasPaymentMethod: boolean;
 }

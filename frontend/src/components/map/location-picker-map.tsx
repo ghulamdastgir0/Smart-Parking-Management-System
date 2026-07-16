@@ -40,18 +40,28 @@ export function LocationPickerMap({
   const [results, setResults] = useState<GeocodeResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [searchFailed, setSearchFailed] = useState(false);
 
   useEffect(() => {
     if (!debouncedQuery.trim()) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setResults([]);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSearchFailed(false);
       return;
     }
     let cancelled = false;
     setSearching(true);
+    setSearchFailed(false);
     searchAddress(debouncedQuery)
       .then((r) => {
         if (!cancelled) setResults(r);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setResults([]);
+          setSearchFailed(true);
+        }
       })
       .finally(() => !cancelled && setSearching(false));
     return () => {
@@ -77,22 +87,32 @@ export function LocationPickerMap({
             <Loader2 className="absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
           )}
         </div>
-        {showResults && results.length > 0 && (
+        {showResults && !searching && debouncedQuery.trim() && (
           <div className="mt-1 max-h-56 overflow-y-auto rounded-lg bg-background/95 shadow-lg backdrop-blur">
-            {results.map((r, i) => (
-              <button
-                key={i}
-                type="button"
-                className="block w-full truncate px-3 py-2 text-left text-sm hover:bg-accent"
-                onClick={() => {
-                  onChange(r.latitude, r.longitude);
-                  setQuery(r.displayName);
-                  setShowResults(false);
-                }}
-              >
-                {r.displayName}
-              </button>
-            ))}
+            {searchFailed ? (
+              <p className="px-3 py-2 text-sm text-destructive">
+                Search failed — check your connection and try again.
+              </p>
+            ) : results.length === 0 ? (
+              <p className="px-3 py-2 text-sm text-muted-foreground">
+                No matching location found
+              </p>
+            ) : (
+              results.map((r, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  className="block w-full truncate px-3 py-2 text-left text-sm hover:bg-accent"
+                  onClick={() => {
+                    onChange(r.latitude, r.longitude);
+                    setQuery(r.displayName);
+                    setShowResults(false);
+                  }}
+                >
+                  {r.displayName}
+                </button>
+              ))
+            )}
           </div>
         )}
       </div>

@@ -38,6 +38,12 @@ import { useParkingLots } from "@/features/parking-lots/hooks";
 import { useCancelReservation, useReservationsByLot } from "@/features/reservations/hooks";
 import type { Reservation } from "@/features/reservations/types";
 import { formatCurrency, formatDateTime } from "@/lib/format";
+import { RESERVATION_STATUS_LABEL } from "@/types/enums";
+
+const STATUS_FILTER_OPTIONS: { value: string; label: string }[] = [
+  { value: "all", label: "All statuses" },
+  ...Object.entries(RESERVATION_STATUS_LABEL).map(([value, label]) => ({ value, label })),
+];
 
 function CancelButton({ reservation }: { reservation: Reservation }) {
   const [open, setOpen] = useState(false);
@@ -125,7 +131,11 @@ export default function AdminReservationsPage() {
         {lotsLoading ? (
           <Skeleton className="h-9 w-full rounded-lg" />
         ) : (
-          <Select value={lotId} onValueChange={(v) => setLotId(v ?? "")}>
+          <Select
+            value={lotId}
+            onValueChange={(v) => setLotId(v ?? "")}
+            items={scopedLots.map((lot) => ({ value: lot.id, label: lot.name }))}
+          >
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Select a parking lot" />
             </SelectTrigger>
@@ -151,18 +161,20 @@ export default function AdminReservationsPage() {
               onChange={(e) => setSearch(e.target.value)}
               className="sm:max-w-xs"
             />
-            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v ?? "all")}>
+            <Select
+              value={statusFilter}
+              onValueChange={(v) => setStatusFilter(v ?? "all")}
+              items={STATUS_FILTER_OPTIONS}
+            >
               <SelectTrigger className="w-full sm:w-48">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All statuses</SelectItem>
-                <SelectItem value="CONFIRMED">Confirmed</SelectItem>
-                <SelectItem value="CHECKED_IN">Checked In</SelectItem>
-                <SelectItem value="OVERTIME">Overtime</SelectItem>
-                <SelectItem value="PENDING_PAYMENT">Pending Payment</SelectItem>
-                <SelectItem value="COMPLETED">Completed</SelectItem>
-                <SelectItem value="CANCELLED">Cancelled</SelectItem>
+                {STATUS_FILTER_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

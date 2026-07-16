@@ -21,5 +21,8 @@ export class NotificationResponseDto {
   message!: string;
 
   @ApiProperty()
+  isRead!: boolean;
+
+  @ApiProperty()
   createdAt!: Date;
 }

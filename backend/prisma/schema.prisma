@@ -72,10 +72,28 @@ model User {
   updatedAt    DateTime      @updatedAt
 
   // Relations
-  managedLots  ParkingLot[]  @relation("ManagerLots")
-  reservations Reservation[]
+  managedLots   ParkingLot[]   @relation("ManagerLots")
+  reservations  Reservation[]
+  paymentMethod PaymentMethod?
 
   @@index([email])
+}
+
+// Only the cardholder name, last 4 digits, expiry, and a cosmetic brand label are stored —
+// never the full card number or CVV. Mirrors how real payment processors work: merchants
+// never persist the full PAN/CVV, only a masked reference for display.
+model PaymentMethod {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  cardholderName String
+  brand          String
+  last4          String
+  expiryMonth    Int
+  expiryYear     Int
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model ParkingLot {
@@ -156,7 +174,7 @@ model Reservation {
   updatedAt    DateTime          @updatedAt
 
   // Relations
-  user         User              @relation(fields: [userId], references: [id])
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   lot          ParkingLot        @relation(fields: [lotId], references: [id])
   slot         ParkingSlot       @relation(fields: [slotId], references: [id])
   payment      Payment?
@@ -258,6 +276,7 @@ model Notification {
   message       String
   metadata      Json?
   forCheckoutAt DateTime?
+  isRead        Boolean                   @default(false)
   createdAt     DateTime                  @default(now())
 
   @@unique([recipientId, reservationId, type, forCheckoutAt])

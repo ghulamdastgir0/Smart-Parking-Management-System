@@ -1,7 +1,18 @@
 "use client";
 
-import { Users } from "lucide-react";
+import { Plus, Trash2, Users } from "lucide-react";
+import Link from "next/link";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -14,15 +25,28 @@ import {
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
-import { useAdminUsers } from "@/features/users/hooks";
+import { useAuth } from "@/features/auth/auth-provider";
+import { useAdminUsers, useDeleteUser } from "@/features/users/hooks";
+import type { AdminUser } from "@/features/users/types";
 import { formatDate } from "@/lib/format";
 
 export default function AdminUsersPage() {
+  const { user: currentUser } = useAuth();
   const { data: users, isLoading, isError, error, refetch } = useAdminUsers();
+  const deleteUser = useDeleteUser();
+  const [toDelete, setToDelete] = useState<AdminUser | null>(null);
 
   return (
     <div>
-      <PageHeader title="Users" description="All registered accounts" />
+      <PageHeader
+        title="Users"
+        description="All registered accounts"
+        actions={
+          <Button render={<Link href="/admin/users/new" />} nativeButton={false}>
+            <Plus className="size-4" /> Add User
+          </Button>
+        }
+      />
       {isLoading ? (
         <Skeleton className="h-64 w-full rounded-xl" />
       ) : isError ? (
@@ -38,6 +62,7 @@ export default function AdminUsersPage() {
                 <TableHead>Email</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Member Since</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -53,12 +78,51 @@ export default function AdminUsersPage() {
                     </Badge>
                   </TableCell>
                   <TableCell>{formatDate(u.createdAt)}</TableCell>
+                  <TableCell className="text-right">
+                    {u.id !== currentUser?.id && (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="text-destructive"
+                        onClick={() => setToDelete(u)}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </div>
       )}
+
+      <Dialog open={Boolean(toDelete)} onOpenChange={(open) => !open && setToDelete(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete User?</DialogTitle>
+            <DialogDescription>
+              This will permanently remove &quot;{toDelete?.firstName} {toDelete?.lastName}
+              &quot; ({toDelete?.email}). This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setToDelete(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteUser.isPending}
+              onClick={() => {
+                if (!toDelete) return;
+                deleteUser.mutate(toDelete.id, { onSuccess: () => setToDelete(null) });
+              }}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

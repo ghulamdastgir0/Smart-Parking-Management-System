@@ -12,7 +12,9 @@ export async function searchAddress(query: string): Promise<GeocodeResult[]> {
     `${NOMINATIM_BASE}/search?format=jsonv2&q=${encodeURIComponent(query)}&limit=5`,
     { headers: { Accept: "application/json" } },
   );
-  if (!res.ok) return [];
+  if (!res.ok) {
+    throw new Error("Location search failed");
+  }
   const data: { display_name: string; lat: string; lon: string }[] = await res.json();
   return data.map((item) => ({
     displayName: item.display_name,

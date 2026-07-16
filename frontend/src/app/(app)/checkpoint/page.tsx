@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, LogIn, LogOut, XCircle } from "lucide-react";
+import { CheckCircle2, Loader2, LogIn, LogOut, XCircle } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -22,6 +22,14 @@ type Result =
       floorName: string;
       message: string;
       extra?: string;
+    }
+  | {
+      kind: "declined";
+      lotName: string;
+      slotNumber: string;
+      floorName: string;
+      message: string;
+      amount: string;
     }
   | { kind: "error"; message: string };
 
@@ -56,15 +64,26 @@ export default function CheckpointPage() {
         { token },
         {
           onSuccess: (data) =>
-            setResult({
-              kind: "success",
-              mode,
-              lotName: data.reservation.lot.name,
-              slotNumber: data.reservation.slot.slotNumber,
-              floorName: data.reservation.slot.floor.name,
-              message: "Checkout initiated — payment due",
-              extra: `Final charge: ${formatCurrency(data.payment.amount)}`,
-            }),
+            setResult(
+              data.paymentFailed
+                ? {
+                    kind: "declined",
+                    lotName: data.reservation.lot.name,
+                    slotNumber: data.reservation.slot.slotNumber,
+                    floorName: data.reservation.slot.floor.name,
+                    message: data.message,
+                    amount: data.payment.amount,
+                  }
+                : {
+                    kind: "success",
+                    mode,
+                    lotName: data.reservation.lot.name,
+                    slotNumber: data.reservation.slot.slotNumber,
+                    floorName: data.reservation.slot.floor.name,
+                    message: "Checkout complete",
+                    extra: `Charged: ${formatCurrency(data.payment.amount)}`,
+                  },
+            ),
           onError: (error) => setResult({ kind: "error", message: getApiErrorMessage(error) }),
         },
       );
@@ -91,40 +110,54 @@ export default function CheckpointPage() {
         </TabsList>
       </Tabs>
 
-      {!result && (
-        <>
-          <QrScanner active={!result} onScan={handleScan} />
-          <div className="mt-4 space-y-2">
-            <p className="text-center text-sm text-muted-foreground">
-              Or enter the code manually — a USB QR scanner types the code here and presses
-              Enter automatically
-            </p>
-            <form
-              className="flex gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (manualToken) handleScan(manualToken);
-              }}
+      <div className={result || checkOut.isPending ? "hidden" : undefined}>
+        <QrScanner active={!result} onScan={handleScan} />
+        <div className="mt-4 space-y-2">
+          <p className="text-center text-sm text-muted-foreground">
+            Or enter the code manually — a USB QR scanner types the code here and presses Enter
+            automatically
+          </p>
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (manualToken) handleScan(manualToken);
+            }}
+          >
+            <Input
+              value={manualToken}
+              onChange={(e) => setManualToken(e.target.value)}
+              placeholder="Reservation token"
+              autoFocus
+            />
+            <Button
+              type="submit"
+              disabled={!manualToken || checkIn.isPending || checkOut.isPending}
             >
-              <Input
-                value={manualToken}
-                onChange={(e) => setManualToken(e.target.value)}
-                placeholder="Reservation token"
-                autoFocus
-              />
-              <Button
-                type="submit"
-                disabled={!manualToken || checkIn.isPending || checkOut.isPending}
-              >
-                Submit
-              </Button>
-            </form>
-          </div>
-        </>
+              Submit
+            </Button>
+          </form>
+        </div>
+      </div>
+
+      {checkOut.isPending && (
+        <Card>
+          <CardContent className="flex flex-col items-center gap-3 py-8 text-center">
+            <Loader2 className="size-10 animate-spin text-primary" />
+            <p className="font-medium">Make payment…</p>
+            <p className="text-sm text-muted-foreground">
+              Charging the customer&apos;s card on file
+            </p>
+          </CardContent>
+        </Card>
       )}
 
       {result && (
-        <Card className={result.kind === "success" ? "border-success/40" : "border-destructive/40"}>
+        <Card
+          className={
+            result.kind === "success" ? "border-success/40" : "border-destructive/40"
+          }
+        >
           <CardContent className="flex flex-col items-center gap-3 py-8 text-center">
             {result.kind === "success" ? (
               <CheckCircle2 className="size-10 text-success" />
@@ -136,11 +169,17 @@ export default function CheckpointPage() {
               {result.kind === "success" && (
                 <p className="text-sm text-muted-foreground">
                   {result.lotName} · Slot {result.slotNumber} · {result.floorName} is now{" "}
-                  {result.mode === "check-in" ? "Occupied" : "awaiting payment"}
+                  {result.mode === "check-in" ? "Occupied" : "Available"}
                 </p>
               )}
               {result.kind === "success" && result.extra && (
                 <p className="mt-1 text-sm font-medium">{result.extra}</p>
+              )}
+              {result.kind === "declined" && (
+                <p className="text-sm text-muted-foreground">
+                  {result.lotName} · Slot {result.slotNumber} · {result.floorName} — attempted
+                  charge {formatCurrency(result.amount)}
+                </p>
               )}
             </div>
             <Button onClick={reset}>Scan Another</Button>

@@ -17,6 +17,7 @@ import { QrCode } from "@/components/shared/qr-code";
 import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { ReservationStatusBadge } from "@/components/shared/status-badge";
+import { CardPaymentDialog } from "@/features/reservations/components/card-payment-dialog";
 import { ReservationTimeline } from "@/features/reservations/components/reservation-timeline";
 import {
   useCancelReservation,
@@ -37,6 +38,7 @@ export default function ReservationDetailPage({
   const failPayment = useFailCheckoutPayment(id);
   const cancelReservation = useCancelReservation(id);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
 
   if (isLoading) {
     return (
@@ -124,17 +126,18 @@ export default function ReservationDetailPage({
             )}
 
             {reservation.status === "PENDING_PAYMENT" && (
-              <div className="flex gap-2 border-t border-border pt-4">
+              <div className="space-y-2 border-t border-border pt-4">
                 <Button
-                  className="flex-1"
-                  onClick={() => confirmPayment.mutate()}
+                  className="w-full"
+                  onClick={() => setShowPaymentDialog(true)}
                   disabled={confirmPayment.isPending || failPayment.isPending}
                 >
-                  Simulate Payment Success
+                  Pay Now
                 </Button>
                 <Button
-                  variant="outline"
-                  className="flex-1"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-muted-foreground"
                   onClick={() => failPayment.mutate()}
                   disabled={confirmPayment.isPending || failPayment.isPending}
                 >
@@ -171,6 +174,16 @@ export default function ReservationDetailPage({
           </CardContent>
         </Card>
       </div>
+
+      <CardPaymentDialog
+        open={showPaymentDialog}
+        onOpenChange={setShowPaymentDialog}
+        amount={grandTotal}
+        isPending={confirmPayment.isPending}
+        onConfirm={() =>
+          confirmPayment.mutate(undefined, { onSuccess: () => setShowPaymentDialog(false) })
+        }
+      />
 
       <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
         <DialogContent>

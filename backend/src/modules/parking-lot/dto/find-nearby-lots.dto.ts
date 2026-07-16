@@ -27,12 +27,12 @@ export class FindNearbyLotsDto {
 
   @ApiPropertyOptional({
     example: 10,
-    description: 'Search radius in kilometers',
+    description: 'Search radius in kilometers (max 70)',
     default: 10,
   })
   @IsOptional()
   @Type(() => Number)
   @IsPositive()
-  @Max(500)
+  @Max(70)
   radiusKm?: number = 10;
 }

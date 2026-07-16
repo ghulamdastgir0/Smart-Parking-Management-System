@@ -25,10 +25,21 @@ export class CheckOutResponseDto {
   @ApiProperty({
     type: PaymentResponseDto,
     description:
-      'Final amount due (base charge + extension/overtime challans). Present the dummy payment screen next.',
+      'Result of charging the customer\'s saved payment method for the final amount ' +
+      '(base charge + extension/overtime challans).',
   })
   payment!: PaymentResponseDto;
 
   @ApiProperty({ type: [ChallanResponseDto] })
   challans!: ChallanResponseDto[];
+
+  @ApiProperty({
+    description:
+      'True if the dummy charge was declined — the reservation stays CHECKED_IN and this ' +
+      'same QR code can be rescanned to retry.',
+  })
+  paymentFailed!: boolean;
+
+  @ApiProperty({ description: 'Human-readable outcome for staff to read out' })
+  message!: string;
 }

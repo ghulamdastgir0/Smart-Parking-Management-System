@@ -1,4 +1,12 @@
-import { Controller, Get, Req, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Patch,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -32,5 +40,14 @@ export class NotificationController {
   findMine(@Req() req: Request): Promise<Notification[]> {
     const user = req.user as AuthenticatedUser;
     return this.notificationService.findMine(user.userId);
+  }
+
+  @Patch('mine/read')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: "Mark all of the authenticated user's notifications as read" })
+  @ApiResponse({ status: 204, description: 'Notifications marked read' })
+  markAllRead(@Req() req: Request): Promise<void> {
+    const user = req.user as AuthenticatedUser;
+    return this.notificationService.markAllRead(user.userId);
   }
 }

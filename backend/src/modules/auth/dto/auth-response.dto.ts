@@ -16,6 +16,11 @@ export class AuthUserDto {
 
   @ApiProperty({ enum: Role })
   role!: Role;
+
+  @ApiProperty({
+    description: 'Whether this user has a saved payment method on file',
+  })
+  hasPaymentMethod!: boolean;
 }
 
 export class AuthResponseDto {

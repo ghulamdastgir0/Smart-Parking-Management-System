@@ -1,17 +1,24 @@
 "use client";
 
 import { Bell } from "lucide-react";
+import { useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
-import { useMyNotifications } from "@/features/notifications/hooks";
+import { useMarkNotificationsRead, useMyNotifications } from "@/features/notifications/hooks";
 import { NotificationIcon } from "@/features/notifications/notification-icon";
 import { formatDateTime } from "@/lib/format";
 
 export default function NotificationsPage() {
   const { data: notifications, isLoading, isError, error, refetch } = useMyNotifications();
+  const markRead = useMarkNotificationsRead();
+
+  useEffect(() => {
+    if (notifications?.some((n) => !n.isRead)) markRead.mutate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notifications]);
 
   return (
     <div className="mx-auto max-w-2xl">

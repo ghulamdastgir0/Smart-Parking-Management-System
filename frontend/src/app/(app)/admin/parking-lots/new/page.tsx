@@ -51,7 +51,7 @@ const floorSchema = z.object({
 const schema = z.object({
   name: z.string().min(1, "Name is required"),
   address: z.string().min(1, "Address is required"),
-  managerId: z.string().optional(),
+  managerId: z.string(),
   sameCapacityForAll: z.boolean(),
   sharedRows: z.number().int().min(1).max(MAX_ROWS),
   sharedColumns: z.number().int().min(1).max(MAX_COLUMNS),
@@ -75,6 +75,7 @@ export default function NewParkingLotPage() {
     defaultValues: {
       name: "",
       address: "",
+      managerId: "",
       sameCapacityForAll: true,
       sharedRows: 5,
       sharedColumns: 10,
@@ -82,6 +83,26 @@ export default function NewParkingLotPage() {
       floors: [{ name: "Ground Floor", floorNumber: 0, rows: 5, columns: 10, defaultSlotPrice: 5 }],
     },
   });
+
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (geoPosition) => {
+        const current: [number, number] = [
+          geoPosition.coords.latitude,
+          geoPosition.coords.longitude,
+        ];
+        setPosition(current);
+        reverseGeocode(current[0], current[1]).then((address) => {
+          if (address) form.setValue("address", address);
+        });
+      },
+      () => {
+        // Permission denied/unavailable — keep the default fallback position.
+      },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -131,7 +152,7 @@ export default function NewParkingLotPage() {
         address: values.address,
         latitude: position[0],
         longitude: position[1],
-        managerId: user?.role === "ADMIN" ? values.managerId : undefined,
+        managerId: user?.role === "ADMIN" && values.managerId ? values.managerId : undefined,
         floors: values.floors.map((f) => ({
           name: f.name,
           floorNumber: f.floorNumber,
@@ -184,7 +205,14 @@ export default function NewParkingLotPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Assign Manager</FormLabel>
-                      <Select value={field.value} onValueChange={field.onChange}>
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        items={managers.map((m) => ({
+                          value: m.id,
+                          label: `${m.firstName} ${m.lastName}`,
+                        }))}
+                      >
                         <FormControl>
                           <SelectTrigger className="w-full">
                             <SelectValue placeholder="Yourself (default)" />

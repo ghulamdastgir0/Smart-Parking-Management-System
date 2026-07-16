@@ -115,10 +115,14 @@ export class CheckpointService {
   }
 
   /**
-   * Scans the checkout QR, records the checkout timestamp, and computes the final charge —
-   * but does NOT invalidate the QR, mark the reservation COMPLETED, or release the slot yet.
-   * Those happen only once the dummy payment succeeds (see ReservationService.confirmCheckoutPayment),
-   * so a failed/abandoned payment can be retried against the same scan without a new QR.
+   * Scans the checkout QR and immediately attempts to charge the customer's saved payment
+   * method for the final amount (base charge + extension/overtime challans).
+   *
+   * On success, the reservation completes and the slot releases in the same transaction as
+   * today's `confirmCheckoutPayment` used to do separately. On decline (no card on file, or
+   * the dummy "ends in 0000" test card), nothing advances — the reservation stays
+   * CHECKED_IN, the slot stays OCCUPIED, and the checkout QR stays ACTIVE, so staff can just
+   * have the customer rescan the same QR to retry once their card is fixed.
    */
   async checkOut(
     token: string,
@@ -127,6 +131,8 @@ export class CheckpointService {
     reservation: ReservationWithLotSlotFloor;
     payment: Payment;
     challans: ChallanResponseDto[];
+    paymentFailed: boolean;
+    message: string;
   }> {
     return this.prisma.$transaction(async (tx) => {
       const qrCode = await this.loadValidQrCode(
@@ -150,28 +156,102 @@ export class CheckpointService {
         );
       }
 
-      const checkedOutAt = new Date();
-      const updatedReservation = await tx.reservation.update({
-        where: { id: reservation.id },
-        data: { status: ReservationStatus.PENDING_PAYMENT, checkedOutAt },
-        include: RESERVATION_LOT_SLOT_FLOOR_INCLUDE,
-      });
-
       const totalCharge = await this.billingService.calculateFinalCharge(
-        updatedReservation,
+        reservation,
         tx,
       );
 
-      const payment = await tx.payment.create({
-        data: {
+      const paymentMethod = await tx.paymentMethod.findUnique({
+        where: { userId: reservation.userId },
+      });
+      // Dummy processor: no card on file, or a card ending in 0000 (mirrors real test-card
+      // conventions like Stripe's decline cards), simulates a decline. Anything else succeeds.
+      const declined = !paymentMethod || paymentMethod.last4 === '0000';
+
+      // At most one Payment row per reservation (schema-enforced) — upsert so a retry after
+      // a decline updates the same row instead of colliding on the unique reservationId.
+      const payment = await tx.payment.upsert({
+        where: { reservationId: reservation.id },
+        create: {
           reservationId: reservation.id,
           amount: totalCharge,
-          status: PaymentStatus.PENDING,
+          status: declined ? PaymentStatus.FAILED : PaymentStatus.SUCCESSFUL,
+          paidAt: declined ? null : new Date(),
+        },
+        update: {
+          amount: totalCharge,
+          status: declined ? PaymentStatus.FAILED : PaymentStatus.SUCCESSFUL,
+          paidAt: declined ? null : new Date(),
         },
       });
 
       const challans = await tx.challan.findMany({
         where: { reservationId: reservation.id },
+      });
+      const challanDtos = challans.map((challan) => ({
+        type: challan.type,
+        amount: challan.amount.toString(),
+        reason: challan.reason,
+        createdAt: challan.createdAt,
+      }));
+
+      if (declined) {
+        await this.auditService.log(
+          {
+            entityType: 'Reservation',
+            entityId: reservation.id,
+            action: 'CHECKOUT_PAYMENT_DECLINED',
+            userId: staffUserId,
+            metadata: { totalCharge, hasPaymentMethod: !!paymentMethod },
+          },
+          tx,
+        );
+
+        await this.notificationService.notify(
+          {
+            recipientId: reservation.userId,
+            recipientRole: NotificationRecipientRole.USER,
+            type: 'PAYMENT_DECLINED',
+            title: 'Payment declined',
+            message: paymentMethod
+              ? `We couldn't charge your card for ${totalCharge}. Update your payment method if needed, then ask staff to rescan your checkout QR code.`
+              : `You don't have a payment method on file, so we couldn't charge ${totalCharge}. Add one in Profile → Billing, then ask staff to rescan your checkout QR code.`,
+            reservationId: reservation.id,
+          },
+          tx,
+        );
+
+        const reservationWithDetails = await tx.reservation.findUniqueOrThrow(
+          {
+            where: { id: reservation.id },
+            include: RESERVATION_LOT_SLOT_FLOOR_INCLUDE,
+          },
+        );
+
+        return {
+          reservation: reservationWithDetails,
+          payment,
+          challans: challanDtos,
+          paymentFailed: true,
+          message: 'Payment declined — ask the customer to rescan this QR code to retry.',
+        };
+      }
+
+      const checkedOutAt = new Date();
+      const updatedReservation = await tx.reservation.update({
+        where: { id: reservation.id },
+        data: { status: ReservationStatus.COMPLETED, checkedOutAt },
+        include: RESERVATION_LOT_SLOT_FLOOR_INCLUDE,
+      });
+
+      await tx.qrCode.update({
+        where: { id: qrCode.id },
+        data: { status: QrCodeStatus.USED, usedAt: new Date() },
+      });
+
+      const slot = await tx.parkingSlot.update({
+        where: { id: reservation.slotId },
+        data: { status: SlotStatus.AVAILABLE },
       });
 
       await this.auditService.log(
@@ -189,23 +269,48 @@ export class CheckpointService {
         {
           recipientId: reservation.userId,
           recipientRole: NotificationRecipientRole.USER,
-          type: 'CHECKOUT_INITIATED',
-          title: 'Checkout started — payment due',
-          message: `Your final parking charge is ${totalCharge}. Please complete payment to finish checking out.`,
+          type: 'PAYMENT_COMPLETED',
+          title: 'Payment successful',
+          message: `Your payment of ${totalCharge} was successful.`,
+          reservationId: reservation.id,
+        },
+        tx,
+      );
+      await this.notificationService.notify(
+        {
+          recipientId: reservation.userId,
+          recipientRole: NotificationRecipientRole.USER,
+          type: 'CHECKOUT_SUCCESS',
+          title: 'Checkout complete',
+          message: 'You have successfully checked out. Thanks for parking with us!',
           reservationId: reservation.id,
         },
         tx,
       );
 
+      const lot = await tx.parkingLot.findUnique({
+        where: { id: reservation.lotId },
+      });
+      if (lot) {
+        await this.notificationService.notify(
+          {
+            recipientId: lot.managerId,
+            recipientRole: NotificationRecipientRole.MANAGER,
+            type: 'CHECKOUT_COMPLETED',
+            title: 'Vehicle checked out',
+            message: `Slot ${slot.slotNumber} at ${lot.name} is now available again.`,
+            reservationId: reservation.id,
+          },
+          tx,
+        );
+      }
+
       return {
         reservation: updatedReservation,
         payment,
-        challans: challans.map((challan) => ({
-          type: challan.type,
-          amount: challan.amount.toString(),
-          reason: challan.reason,
-          createdAt: challan.createdAt,
-        })),
+        challans: challanDtos,
+        paymentFailed: false,
+        message: 'Checkout complete.',
       };
     });
   }

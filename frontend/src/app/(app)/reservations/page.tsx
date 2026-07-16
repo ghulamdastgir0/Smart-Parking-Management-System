@@ -38,7 +38,7 @@ import { ReservationStatusBadge } from "@/components/shared/status-badge";
 import { useCancelReservation, useMyReservations } from "@/features/reservations/hooks";
 import type { Reservation } from "@/features/reservations/types";
 import { formatCurrency, formatDateTime } from "@/lib/format";
-import type { ReservationStatus } from "@/types/enums";
+import { RESERVATION_STATUS_LABEL, type ReservationStatus } from "@/types/enums";
 
 const ACTIVE_STATUSES: ReservationStatus[] = [
   "CONFIRMED",
@@ -135,7 +135,17 @@ export default function MyReservationsPage() {
           onChange={(e) => setSearch(e.target.value)}
           className="sm:max-w-xs"
         />
-        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v ?? "all")}>
+        <Select
+          value={statusFilter}
+          onValueChange={(v) => setStatusFilter(v ?? "all")}
+          items={[
+            { value: "all", label: "All statuses" },
+            ...(tab === "active" ? ACTIVE_STATUSES : HISTORY_STATUSES).map((s) => ({
+              value: s,
+              label: RESERVATION_STATUS_LABEL[s],
+            })),
+          ]}
+        >
           <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
@@ -143,7 +153,7 @@ export default function MyReservationsPage() {
             <SelectItem value="all">All statuses</SelectItem>
             {(tab === "active" ? ACTIVE_STATUSES : HISTORY_STATUSES).map((s) => (
               <SelectItem key={s} value={s}>
-                {s}
+                {RESERVATION_STATUS_LABEL[s]}
               </SelectItem>
             ))}
           </SelectContent>

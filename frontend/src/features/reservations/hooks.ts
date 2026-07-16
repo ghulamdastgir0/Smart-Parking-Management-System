@@ -2,21 +2,26 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useAuth } from "@/features/auth/auth-provider";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { reservationsApi } from "./api";
 import type { CreateReservationPayload } from "./types";
 
 export const reservationsKeys = {
   all: ["reservations"] as const,
-  mine: ["reservations", "mine"] as const,
+  // Scoped by user id so a slow response from a previous session can never land in the
+  // now-logged-in user's cache slot — it writes to the old (unsubscribed) key instead.
+  mine: (userId: string | undefined) => ["reservations", "mine", userId] as const,
   byLot: (lotId: string) => ["reservations", "by-lot", lotId] as const,
   detail: (id: string) => ["reservations", id] as const,
 };
 
 export function useMyReservations() {
+  const { user } = useAuth();
   return useQuery({
-    queryKey: reservationsKeys.mine,
+    queryKey: reservationsKeys.mine(user?.id),
     queryFn: reservationsApi.findMine,
+    enabled: Boolean(user),
   });
 }
 

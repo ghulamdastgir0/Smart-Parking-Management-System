@@ -6,6 +6,13 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
@@ -20,9 +27,12 @@ const NearbyMap = dynamic(
   { ssr: false, loading: () => <Skeleton className="h-full w-full rounded-xl" /> },
 );
 
+const RADIUS_OPTIONS = [10, 20, 30, 40, 50, 60, 70];
+
 export default function NearbyPage() {
   const geo = useGeolocation();
   const [selectedLotId, setSelectedLotId] = useState<string | null>(null);
+  const [radiusKm, setRadiusKm] = useState(10);
 
   useEffect(() => {
     geo.locate();
@@ -31,14 +41,35 @@ export default function NearbyPage() {
 
   const params =
     geo.status === "success" && geo.latitude !== null && geo.longitude !== null
-      ? { latitude: geo.latitude, longitude: geo.longitude, radiusKm: 10 }
+      ? { latitude: geo.latitude, longitude: geo.longitude, radiusKm }
       : null;
 
   const { data: lots, isLoading, isError, error, refetch } = useNearbyParkingLots(params);
 
   return (
     <div className="flex h-[calc(100svh-8rem)] flex-col lg:h-[calc(100svh-6rem)]">
-      <PageHeader title="Nearby Parking" description="Find and book parking close to you" />
+      <PageHeader
+        title="Nearby Parking"
+        description="Find and book parking close to you"
+        actions={
+          <Select
+            value={String(radiusKm)}
+            onValueChange={(v) => v && setRadiusKm(Number(v))}
+            items={RADIUS_OPTIONS.map((km) => ({ value: String(km), label: `Within ${km} km` }))}
+          >
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {RADIUS_OPTIONS.map((km) => (
+                <SelectItem key={km} value={String(km)}>
+                  Within {km} km
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        }
+      />
 
       {geo.status === "error" && (
         <div className="mb-4 flex items-center gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm">
@@ -63,8 +94,8 @@ export default function NearbyPage() {
           ) : !lots || lots.length === 0 ? (
             <EmptyState
               icon={MapPin}
-              title="No parking lots found within 10km"
-              description="Try again later or check back once more lots are added nearby."
+              title={`No parking lots found within ${radiusKm}km`}
+              description="Try a wider radius, or check back once more lots are added nearby."
             />
           ) : (
             <div className="space-y-3">

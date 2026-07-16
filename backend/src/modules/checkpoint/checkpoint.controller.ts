@@ -54,14 +54,15 @@ export class CheckpointController {
   @ApiOperation({
     summary: 'Scan a Checkout QR code as the user leaves the facility',
     description:
-      'Computes the final charge (base + extension/overtime challans) and creates a PENDING ' +
-      'payment. The reservation moves to PENDING_PAYMENT and the QR stays valid — nothing is ' +
-      'released until the dummy checkout payment is confirmed via the Reservations endpoints.',
+      'Computes the final charge (base + extension/overtime challans) and immediately ' +
+      "charges the customer's saved payment method. On success the reservation completes " +
+      'and the slot releases. On decline (no card on file, or a dummy test card ending in ' +
+      '0000), nothing changes — the reservation stays CHECKED_IN and this same QR code can ' +
+      'be rescanned to retry.',
   })
   @ApiResponse({
     status: 200,
-    description:
-      'Checkout initiated: final charge computed, payment created and awaiting confirmation',
+    description: 'Checkout resolved — see `paymentFailed` for the outcome',
     type: CheckOutResponseDto,
   })
   @ApiResponse({ status: 404, description: 'QR code not recognized' })
