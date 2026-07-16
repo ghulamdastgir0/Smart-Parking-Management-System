@@ -2,7 +2,7 @@
 
 import { Building2, Search } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -20,12 +20,17 @@ import { PageHeader } from "@/components/shared/page-header";
 import { useParkingLots } from "@/features/parking-lots/hooks";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { formatCurrency } from "@/lib/format";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import {
+  parkingLotsPageChanged,
+  parkingLotsSearchChanged,
+  parkingLotsSortChanged,
+  type ParkingLotsSortKey,
+} from "@/store/slices/filters-slice";
 
 const PAGE_SIZE = 9;
 
-type SortKey = "name" | "price" | "availability";
-
-const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+const SORT_OPTIONS: { value: ParkingLotsSortKey; label: string }[] = [
   { value: "name", label: "Name" },
   { value: "price", label: "Price (lowest)" },
   { value: "availability", label: "Availability" },
@@ -33,10 +38,9 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
 
 export default function ParkingLotsPage() {
   const { data: lots, isLoading, isError, error, refetch } = useParkingLots();
-  const [search, setSearch] = useState("");
+  const dispatch = useAppDispatch();
+  const { search, sort, page } = useAppSelector((state) => state.filters.parkingLots);
   const debouncedSearch = useDebouncedValue(search, 300);
-  const [sort, setSort] = useState<SortKey>("name");
-  const [page, setPage] = useState(1);
 
   const filtered = useMemo(() => {
     if (!lots) return [];
@@ -72,15 +76,12 @@ export default function ParkingLotsPage() {
             placeholder="Search by name or address…"
             className="pl-9"
             value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
+            onChange={(e) => dispatch(parkingLotsSearchChanged(e.target.value))}
           />
         </div>
         <Select
           value={sort}
-          onValueChange={(v) => v && setSort(v as SortKey)}
+          onValueChange={(v) => v && dispatch(parkingLotsSortChanged(v as ParkingLotsSortKey))}
           items={SORT_OPTIONS}
         >
           <SelectTrigger className="w-full sm:w-48">
@@ -109,7 +110,10 @@ export default function ParkingLotsPage() {
           icon={Building2}
           title="No parking lots match your search"
           description="Try a different search term."
-          action={{ label: "Clear search", onClick: () => setSearch("") }}
+          action={{
+            label: "Clear search",
+            onClick: () => dispatch(parkingLotsSearchChanged("")),
+          }}
         />
       ) : (
         <>
@@ -166,7 +170,7 @@ export default function ParkingLotsPage() {
                 variant="outline"
                 size="sm"
                 disabled={page === 1}
-                onClick={() => setPage((p) => p - 1)}
+                onClick={() => dispatch(parkingLotsPageChanged(page - 1))}
               >
                 Previous
               </Button>
@@ -177,7 +181,7 @@ export default function ParkingLotsPage() {
                 variant="outline"
                 size="sm"
                 disabled={page === totalPages}
-                onClick={() => setPage((p) => p + 1)}
+                onClick={() => dispatch(parkingLotsPageChanged(page + 1))}
               >
                 Next
               </Button>

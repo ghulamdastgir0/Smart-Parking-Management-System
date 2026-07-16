@@ -38,6 +38,12 @@ import { useParkingLots } from "@/features/parking-lots/hooks";
 import { useCancelReservation, useReservationsByLot } from "@/features/reservations/hooks";
 import type { Reservation } from "@/features/reservations/types";
 import { formatCurrency, formatDateTime } from "@/lib/format";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import {
+  adminReservationsLotChanged,
+  adminReservationsSearchChanged,
+  adminReservationsStatusChanged,
+} from "@/store/slices/filters-slice";
 import { RESERVATION_STATUS_LABEL } from "@/types/enums";
 
 const STATUS_FILTER_OPTIONS: { value: string; label: string }[] = [
@@ -88,11 +94,13 @@ function CancelButton({ reservation }: { reservation: Reservation }) {
 export default function AdminReservationsPage() {
   const { user } = useAuth();
   const { data: lots, isLoading: lotsLoading } = useParkingLots();
-  // Always a defined string (never undefined) so Select stays controlled from the first
-  // render — switching from uncontrolled to controlled mid-lifecycle triggers a Base UI warning.
-  const [lotId, setLotId] = useState("");
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const dispatch = useAppDispatch();
+  // lotId is always a defined string (never undefined) so Select stays controlled from the
+  // first render — switching from uncontrolled to controlled mid-lifecycle triggers a Base
+  // UI warning. The filters slice's initial state preserves that invariant.
+  const { lotId, search, statusFilter } = useAppSelector(
+    (state) => state.filters.adminReservations,
+  );
 
   const scopedLots = useMemo(() => {
     if (!lots) return [];
@@ -133,7 +141,7 @@ export default function AdminReservationsPage() {
         ) : (
           <Select
             value={lotId}
-            onValueChange={(v) => setLotId(v ?? "")}
+            onValueChange={(v) => dispatch(adminReservationsLotChanged(v ?? ""))}
             items={scopedLots.map((lot) => ({ value: lot.id, label: lot.name }))}
           >
             <SelectTrigger className="w-full">
@@ -158,12 +166,12 @@ export default function AdminReservationsPage() {
             <Input
               placeholder="Search by customer name or email…"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => dispatch(adminReservationsSearchChanged(e.target.value))}
               className="sm:max-w-xs"
             />
             <Select
               value={statusFilter}
-              onValueChange={(v) => setStatusFilter(v ?? "all")}
+              onValueChange={(v) => dispatch(adminReservationsStatusChanged(v ?? "all"))}
               items={STATUS_FILTER_OPTIONS}
             >
               <SelectTrigger className="w-full sm:w-48">

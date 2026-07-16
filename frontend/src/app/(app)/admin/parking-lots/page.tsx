@@ -30,12 +30,15 @@ import { useAuth } from "@/features/auth/auth-provider";
 import { useDeleteParkingLot, useParkingLots } from "@/features/parking-lots/hooks";
 import type { ParkingLot } from "@/features/parking-lots/types";
 import { formatCurrency } from "@/lib/format";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { adminParkingLotsSearchChanged } from "@/store/slices/filters-slice";
 
 export default function AdminParkingLotsPage() {
   const { user } = useAuth();
   const { data: lots, isLoading, isError, error, refetch } = useParkingLots();
   const deleteLot = useDeleteParkingLot();
-  const [search, setSearch] = useState("");
+  const dispatch = useAppDispatch();
+  const search = useAppSelector((state) => state.filters.adminParkingLots.search);
   const [toDelete, setToDelete] = useState<ParkingLot | null>(null);
 
   const visible = useMemo(() => {
@@ -68,7 +71,7 @@ export default function AdminParkingLotsPage() {
           placeholder="Search lots…"
           className="pl-9"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => dispatch(adminParkingLotsSearchChanged(e.target.value))}
         />
       </div>
 

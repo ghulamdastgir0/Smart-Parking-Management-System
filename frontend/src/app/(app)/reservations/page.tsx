@@ -38,6 +38,12 @@ import { ReservationStatusBadge } from "@/components/shared/status-badge";
 import { useCancelReservation, useMyReservations } from "@/features/reservations/hooks";
 import type { Reservation } from "@/features/reservations/types";
 import { formatCurrency, formatDateTime } from "@/lib/format";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import {
+  myReservationsSearchChanged,
+  myReservationsStatusChanged,
+  myReservationsTabChanged,
+} from "@/store/slices/filters-slice";
 import { RESERVATION_STATUS_LABEL, type ReservationStatus } from "@/types/enums";
 
 const ACTIVE_STATUSES: ReservationStatus[] = [
@@ -95,9 +101,8 @@ function CancelButton({ reservation }: { reservation: Reservation }) {
 
 export default function MyReservationsPage() {
   const { data: reservations, isLoading, isError, error, refetch } = useMyReservations();
-  const [tab, setTab] = useState<"active" | "history">("active");
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const dispatch = useAppDispatch();
+  const { tab, search, statusFilter } = useAppSelector((state) => state.filters.myReservations);
 
   const filtered = useMemo(() => {
     if (!reservations) return [];
@@ -117,10 +122,7 @@ export default function MyReservationsPage() {
 
       <Tabs
         value={tab}
-        onValueChange={(v) => {
-          setTab(v as "active" | "history");
-          setStatusFilter("all");
-        }}
+        onValueChange={(v) => dispatch(myReservationsTabChanged(v as "active" | "history"))}
       >
         <TabsList>
           <TabsTrigger value="active">Active</TabsTrigger>
@@ -132,12 +134,12 @@ export default function MyReservationsPage() {
         <Input
           placeholder="Search by parking lot name…"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => dispatch(myReservationsSearchChanged(e.target.value))}
           className="sm:max-w-xs"
         />
         <Select
           value={statusFilter}
-          onValueChange={(v) => setStatusFilter(v ?? "all")}
+          onValueChange={(v) => dispatch(myReservationsStatusChanged(v ?? "all"))}
           items={[
             { value: "all", label: "All statuses" },
             ...(tab === "active" ? ACTIVE_STATUSES : HISTORY_STATUSES).map((s) => ({

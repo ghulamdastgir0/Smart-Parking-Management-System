@@ -3,7 +3,6 @@
 import { Menu, ParkingSquare } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -13,22 +12,25 @@ import {
 } from "@/components/ui/sheet";
 import { useAuth } from "@/features/auth/auth-provider";
 import { cn } from "@/lib/utils";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { drawerClosed, drawerOpened } from "@/store/slices/ui-slice";
 import { NAV_ITEMS, visibleNavItems } from "./nav-items";
 
 export function MobileDrawer() {
-  const [open, setOpen] = useState(false);
+  const open = useAppSelector((state) => state.ui.mobileDrawerOpen);
+  const dispatch = useAppDispatch();
   const pathname = usePathname();
   const { user } = useAuth();
   const items = visibleNavItems(NAV_ITEMS, user?.role);
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
+    <Sheet open={open} onOpenChange={(next) => dispatch(next ? drawerOpened() : drawerClosed())}>
       <Button
         variant="ghost"
         size="icon"
         className="lg:hidden"
         aria-label="Open menu"
-        onClick={() => setOpen(true)}
+        onClick={() => dispatch(drawerOpened())}
       >
         <Menu className="size-5" />
       </Button>
@@ -47,7 +49,7 @@ export function MobileDrawer() {
               <Link
                 key={item.href}
                 href={item.href}
-                onClick={() => setOpen(false)}
+                onClick={() => dispatch(drawerClosed())}
                 className={cn(
                   "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                   active

@@ -4,6 +4,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { QueryProvider } from "@/lib/query-provider";
 import { AuthProvider } from "@/features/auth/auth-provider";
+import { ReduxProvider } from "@/store/provider";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
@@ -34,14 +35,16 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
-        <ThemeProvider>
-          <QueryProvider>
-            <AuthProvider>
-              <TooltipProvider>{children}</TooltipProvider>
-              <Toaster position="top-right" />
-            </AuthProvider>
-          </QueryProvider>
-        </ThemeProvider>
+        <ReduxProvider>
+          <ThemeProvider>
+            <QueryProvider>
+              <AuthProvider>
+                <TooltipProvider>{children}</TooltipProvider>
+                <Toaster position="top-right" />
+              </AuthProvider>
+            </QueryProvider>
+          </ThemeProvider>
+        </ReduxProvider>
       </body>
     </html>
   );
