@@ -4,7 +4,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, ParkingLot } from '@prisma/client';
+import { Prisma, ParkingLot, SlotStatus } from '@prisma/client';
 import { AuditService } from '../../common/audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
@@ -28,6 +28,13 @@ interface NearbyLotRow {
   longitude: number;
   distanceKm: number;
 }
+
+export interface LotAvailability {
+  availableSlots: number;
+  minHourlyRate: string | null;
+}
+
+export type ParkingLotWithAvailability = ParkingLot & LotAvailability;
 
 @Injectable()
 export class ParkingLotService {
@@ -114,16 +121,60 @@ export class ParkingLotService {
     return slots;
   }
 
-  findAll(): Promise<ParkingLot[]> {
-    return this.prisma.parkingLot.findMany();
+  /**
+   * Slot counts/pricing aren't denormalized onto ParkingLot, so every list/detail response
+   * enriches with a single grouped aggregate query rather than one query per lot.
+   */
+  private async getAvailabilityMap(
+    lotIds: string[],
+  ): Promise<Map<string, LotAvailability>> {
+    if (lotIds.length === 0) {
+      return new Map();
+    }
+
+    const grouped = await this.prisma.parkingSlot.groupBy({
+      by: ['lotId'],
+      where: { lotId: { in: lotIds }, status: SlotStatus.AVAILABLE },
+      _count: { _all: true },
+      _min: { basePrice: true },
+    });
+
+    return new Map(
+      grouped.map((group) => [
+        group.lotId,
+        {
+          availableSlots: group._count._all,
+          minHourlyRate: group._min.basePrice?.toString() ?? null,
+        },
+      ]),
+    );
   }
 
-  async findOne(id: string): Promise<ParkingLot> {
+  private mergeAvailability(
+    lot: ParkingLot,
+    availability: Map<string, LotAvailability>,
+  ): ParkingLotWithAvailability {
+    const entry = availability.get(lot.id);
+    return {
+      ...lot,
+      availableSlots: entry?.availableSlots ?? 0,
+      minHourlyRate: entry?.minHourlyRate ?? null,
+    };
+  }
+
+  async findAll(): Promise<ParkingLotWithAvailability[]> {
+    const lots = await this.prisma.parkingLot.findMany();
+    const availability = await this.getAvailabilityMap(lots.map((l) => l.id));
+    return lots.map((lot) => this.mergeAvailability(lot, availability));
+  }
+
+  async findOne(id: string): Promise<ParkingLotWithAvailability> {
     const lot = await this.prisma.parkingLot.findUnique({ where: { id } });
     if (!lot) {
       throw new NotFoundException(`Parking lot ${id} not found`);
     }
-    return lot;
+    const availability = await this.getAvailabilityMap([id]);
+    return this.mergeAvailability(lot, availability);
   }
 
   async update(id: string, dto: UpdateParkingLotDto): Promise<ParkingLot> {
@@ -172,7 +223,10 @@ export class ParkingLotService {
       latitude: row.latitude,
       longitude: row.longitude,
     }));
-    const etas = await this.mapsService.getDrivingEtas(origin, destinations);
+    const [etas, availability] = await Promise.all([
+      this.mapsService.getDrivingEtas(origin, destinations),
+      this.getAvailabilityMap(rows.map((row) => row.id)),
+    ]);
 
     return rows.map((row, index) => ({
       id: row.id,
@@ -183,6 +237,8 @@ export class ParkingLotService {
       distanceKm: Math.round(Number(row.distanceKm) * 100) / 100,
       drivingDistanceKm: etas[index].distanceKm,
       etaMinutes: etas[index].durationMinutes,
+      availableSlots: availability.get(row.id)?.availableSlots ?? 0,
+      minHourlyRate: availability.get(row.id)?.minHourlyRate ?? null,
     }));
   }
 }

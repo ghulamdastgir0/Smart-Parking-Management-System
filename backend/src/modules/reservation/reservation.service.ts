@@ -29,6 +29,16 @@ import { CreateReservationDto } from './dto/create-reservation.dto';
 export const DEFAULT_CHECKIN_GRACE_MINUTES = 60;
 export const DEFAULT_CHECKOUT_BUFFER_MINUTES = 30;
 
+const RESERVATION_DETAIL_INCLUDE = {
+  payment: true,
+  qrCodes: true,
+  challans: true,
+} satisfies Prisma.ReservationInclude;
+
+export type ReservationWithDetails = Prisma.ReservationGetPayload<{
+  include: typeof RESERVATION_DETAIL_INCLUDE;
+}>;
+
 @Injectable()
 export class ReservationService {
   constructor(
@@ -153,19 +163,21 @@ export class ReservationService {
     });
   }
 
-  findMine(userId: string): Promise<Reservation[]> {
+  findMine(userId: string): Promise<ReservationWithDetails[]> {
     return this.prisma.reservation.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
+      include: RESERVATION_DETAIL_INCLUDE,
     });
   }
 
   async findOne(
     id: string,
     requestingUser: AuthenticatedUser,
-  ): Promise<Reservation> {
+  ): Promise<ReservationWithDetails> {
     const reservation = await this.prisma.reservation.findUnique({
       where: { id },
+      include: RESERVATION_DETAIL_INCLUDE,
     });
     if (!reservation) {
       throw new NotFoundException(`Reservation ${id} not found`);

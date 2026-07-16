@@ -13,7 +13,6 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { Reservation } from '@prisma/client';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
@@ -22,7 +21,10 @@ import {
   CheckoutPaymentConfirmedResponseDto,
   CreateReservationResponseDto,
 } from './dto/reservation-response.dto';
-import { ReservationService } from './reservation.service';
+import {
+  ReservationService,
+  ReservationWithDetails,
+} from './reservation.service';
 
 @ApiTags('Reservations')
 @ApiBearerAuth()
@@ -57,7 +59,7 @@ export class ReservationController {
 
   @Get('mine')
   @ApiOperation({ summary: "List the authenticated user's reservations" })
-  findMine(@Req() req: Request): Promise<Reservation[]> {
+  findMine(@Req() req: Request): Promise<ReservationWithDetails[]> {
     const user = req.user as AuthenticatedUser;
     return this.reservationService.findMine(user.userId);
   }
@@ -68,7 +70,10 @@ export class ReservationController {
   })
   @ApiResponse({ status: 404, description: 'Reservation not found' })
   @ApiResponse({ status: 403, description: 'Not the reservation owner' })
-  findOne(@Param('id') id: string, @Req() req: Request): Promise<Reservation> {
+  findOne(
+    @Param('id') id: string,
+    @Req() req: Request,
+  ): Promise<ReservationWithDetails> {
     const user = req.user as AuthenticatedUser;
     return this.reservationService.findOne(id, user);
   }

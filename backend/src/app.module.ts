@@ -1,8 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
 import { AuditModule } from './common/audit/audit.module';
 import { NotificationModule } from './common/notification/notification.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -29,7 +27,5 @@ import { PrismaModule } from './prisma/prisma.module';
     CheckpointModule,
     NotificationHttpModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
 })
 export class AppModule {}

@@ -35,4 +35,13 @@ export class NearbyParkingLotDto {
     nullable: true,
   })
   etaMinutes!: number | null;
+
+  @ApiProperty({ description: 'Count of currently AVAILABLE slots in this lot' })
+  availableSlots!: number;
+
+  @ApiPropertyOptional({
+    description: 'Lowest hourly base price among this lot\'s slots (null if the lot has no slots)',
+    nullable: true,
+  })
+  minHourlyRate!: string | null;
 }

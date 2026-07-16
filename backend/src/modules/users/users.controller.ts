@@ -26,12 +26,12 @@ import { UsersService } from './users.service';
 @ApiTags('Users')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN)
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
+  @Roles(Role.ADMIN)
   @ApiOperation({
     summary: 'Create a user with any role (Admin only)',
     description:
@@ -54,6 +54,7 @@ export class UsersController {
   }
 
   @Get()
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'List all users (Admin only)' })
   @ApiResponse({
     status: 200,
@@ -64,7 +65,20 @@ export class UsersController {
     return this.usersService.findAll();
   }
 
+  @Get('me')
+  @ApiOperation({ summary: 'Get the authenticated user\'s own profile' })
+  @ApiResponse({
+    status: 200,
+    description: 'Current user',
+    type: UserResponseDto,
+  })
+  findMe(@Req() req: Request): Promise<UserResponseDto> {
+    const user = req.user as AuthenticatedUser;
+    return this.usersService.findOne(user.userId);
+  }
+
   @Get(':id')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Get a user by id (Admin only)' })
   @ApiResponse({
     status: 200,

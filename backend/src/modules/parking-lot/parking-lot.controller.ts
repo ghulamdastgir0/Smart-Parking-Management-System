@@ -27,7 +27,10 @@ import { CreateParkingLotDto } from './dto/create-parking-lot.dto';
 import { FindNearbyLotsDto } from './dto/find-nearby-lots.dto';
 import { NearbyParkingLotDto } from './dto/nearby-parking-lot.dto';
 import { UpdateParkingLotDto } from './dto/update-parking-lot.dto';
-import { ParkingLotService } from './parking-lot.service';
+import {
+  ParkingLotService,
+  ParkingLotWithAvailability,
+} from './parking-lot.service';
 
 @ApiTags('Parking Lots')
 @Controller('parking-lots')
@@ -75,7 +78,7 @@ export class ParkingLotController {
   @Get()
   @ApiOperation({ summary: 'List all parking lots' })
   @ApiResponse({ status: 200, description: 'List of parking lots' })
-  findAll(): Promise<ParkingLot[]> {
+  findAll(): Promise<ParkingLotWithAvailability[]> {
     return this.parkingLotService.findAll();
   }
 
@@ -83,7 +86,7 @@ export class ParkingLotController {
   @ApiOperation({ summary: 'Get a single parking lot by id' })
   @ApiResponse({ status: 200, description: 'Parking lot found' })
   @ApiResponse({ status: 404, description: 'Parking lot not found' })
-  findOne(@Param('id') id: string): Promise<ParkingLot> {
+  findOne(@Param('id') id: string): Promise<ParkingLotWithAvailability> {
     return this.parkingLotService.findOne(id);
   }
 
