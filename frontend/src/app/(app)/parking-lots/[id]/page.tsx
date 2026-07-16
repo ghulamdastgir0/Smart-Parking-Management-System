@@ -90,6 +90,7 @@ export default function ParkingLotDetailPage({
               className="w-full"
               disabled={lot.availableSlots === 0}
               render={<Link href={`/parking-lots/${id}/book`} />}
+              nativeButton={false}
             >
               {lot.availableSlots === 0 ? "No Slots Available" : "Reserve a Slot"}
             </Button>

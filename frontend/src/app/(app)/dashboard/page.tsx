@@ -114,7 +114,7 @@ function CustomerDashboard() {
           <CardContent className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="font-heading font-medium">Nearby Parking</h2>
-              <Button variant="ghost" size="sm" render={<Link href="/nearby" />}>
+              <Button variant="ghost" size="sm" render={<Link href="/nearby" />} nativeButton={false}>
                 See map
               </Button>
             </div>
@@ -129,7 +129,7 @@ function CustomerDashboard() {
           <CardContent className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="font-heading font-medium">Recent Notifications</h2>
-              <Button variant="ghost" size="sm" render={<Link href="/notifications" />}>
+              <Button variant="ghost" size="sm" render={<Link href="/notifications" />} nativeButton={false}>
                 View all
               </Button>
             </div>
@@ -187,7 +187,9 @@ function StaffDashboard() {
                 <p className="text-xs text-muted-foreground">Create, edit, and monitor lots</p>
               </div>
             </div>
-            <Button render={<Link href="/admin/parking-lots" />}>Open</Button>
+            <Button render={<Link href="/admin/parking-lots" />} nativeButton={false}>
+              Open
+            </Button>
           </CardContent>
         </Card>
         <Card>
@@ -201,7 +203,9 @@ function StaffDashboard() {
                 <p className="text-xs text-muted-foreground">Check vehicles in and out</p>
               </div>
             </div>
-            <Button render={<Link href="/checkpoint" />}>Open</Button>
+            <Button render={<Link href="/checkpoint" />} nativeButton={false}>
+              Open
+            </Button>
           </CardContent>
         </Card>
       </div>

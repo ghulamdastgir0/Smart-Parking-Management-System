@@ -48,6 +48,7 @@ export function ActiveReservationCard({ reservation }: { reservation: Reservatio
             variant="outline"
             size="sm"
             render={<Link href={`/reservations/${reservation.id}`} />}
+            nativeButton={false}
           >
             View Details <ArrowRight className="size-3.5" />
           </Button>

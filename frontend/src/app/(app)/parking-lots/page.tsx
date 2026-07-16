@@ -138,6 +138,7 @@ export default function ParkingLotsPage() {
                       variant="outline"
                       className="mt-auto"
                       render={<Link href={`/parking-lots/${lot.id}`} />}
+                      nativeButton={false}
                     >
                       View Details
                     </Button>

@@ -11,7 +11,6 @@ export function QrScanner({
   onScan: (decodedText: string) => void;
 }) {
   const elementId = useId().replace(/:/g, "");
-  const scannerRef = useRef<Html5Qrcode | null>(null);
   const onScanRef = useRef(onScan);
 
   useEffect(() => {
@@ -22,8 +21,8 @@ export function QrScanner({
     if (!active) return;
 
     const scanner = new Html5Qrcode(elementId);
-    scannerRef.current = scanner;
     let cancelled = false;
+    let isRunning = false;
 
     scanner
       .start(
@@ -35,17 +34,29 @@ export function QrScanner({
         },
         undefined,
       )
+      .then(() => {
+        if (cancelled) {
+          // Unmounted while start() was still resolving — stop immediately instead of
+          // leaving the camera running.
+          scanner.stop().catch(() => undefined).finally(() => scanner.clear());
+          return;
+        }
+        isRunning = true;
+      })
       .catch(() => {
         // Camera unavailable/denied — the manual token entry fallback still works.
       });
 
     return () => {
       cancelled = true;
-      scanner
-        .stop()
-        .catch(() => undefined)
-        .finally(() => scanner.clear());
-      scannerRef.current = null;
+      // Html5Qrcode.stop() throws synchronously (not a rejected promise) if the scanner
+      // never reached the running state, so only call it once start() has confirmed.
+      if (isRunning) {
+        scanner
+          .stop()
+          .catch(() => undefined)
+          .finally(() => scanner.clear());
+      }
     };
   }, [active, elementId]);
 

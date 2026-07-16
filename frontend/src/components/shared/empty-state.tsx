@@ -24,7 +24,12 @@ export function EmptyState({
         )}
       </div>
       {action && (
-        <Button onClick={action.onClick} render={action.render} className="mt-2">
+        <Button
+          onClick={action.onClick}
+          render={action.render}
+          nativeButton={!action.render}
+          className="mt-2"
+        >
           {action.label}
         </Button>
       )}

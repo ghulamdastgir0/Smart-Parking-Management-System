@@ -165,6 +165,7 @@ export default function BookingPage({
           <Button
             className="flex-1"
             render={<Link href={`/reservations/${result.reservation.id}`} />}
+            nativeButton={false}
           >
             View Reservation Details
           </Button>
@@ -177,6 +178,7 @@ export default function BookingPage({
                 download={`reservation-${result.reservation.id}.png`}
               />
             }
+            nativeButton={false}
           >
             <Download className="size-4" />
           </Button>

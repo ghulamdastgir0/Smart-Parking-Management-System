@@ -144,7 +144,12 @@ export default function MyReservationsPage() {
                     {formatDateTime(r.startTime)} → {formatDateTime(r.endTime)}
                   </p>
                 </div>
-                <Button variant="outline" size="sm" render={<Link href={`/reservations/${r.id}`} />}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  render={<Link href={`/reservations/${r.id}`} />}
+                  nativeButton={false}
+                >
                   View Details
                 </Button>
               </CardContent>
@@ -177,7 +182,12 @@ export default function MyReservationsPage() {
                     <ReservationStatusBadge status={r.status} />
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="sm" render={<Link href={`/reservations/${r.id}`} />}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      render={<Link href={`/reservations/${r.id}`} />}
+                      nativeButton={false}
+                    >
                       View
                     </Button>
                   </TableCell>

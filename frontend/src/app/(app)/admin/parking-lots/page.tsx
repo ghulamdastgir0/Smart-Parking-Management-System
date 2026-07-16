@@ -56,7 +56,7 @@ export default function AdminParkingLotsPage() {
         title="Manage Parking Lots"
         description="Create, edit, and monitor your parking lots"
         actions={
-          <Button render={<Link href="/admin/parking-lots/new" />}>
+          <Button render={<Link href="/admin/parking-lots/new" />} nativeButton={false}>
             <Plus className="size-4" /> Add Parking Lot
           </Button>
         }
@@ -119,6 +119,7 @@ export default function AdminParkingLotsPage() {
                       variant="ghost"
                       size="icon-sm"
                       render={<Link href={`/admin/parking-lots/${lot.id}/edit`} />}
+                      nativeButton={false}
                     >
                       <Pencil className="size-3.5" />
                     </Button>

@@ -23,7 +23,9 @@ export default function UnauthorizedPage() {
         </p>
       </div>
       <div className="flex gap-3">
-        <Button render={<Link href="/dashboard" />}>Back to Dashboard</Button>
+        <Button render={<Link href="/dashboard" />} nativeButton={false}>
+          Back to Dashboard
+        </Button>
         <Button variant="ghost" onClick={logout}>
           Log out
         </Button>
