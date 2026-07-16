@@ -5,6 +5,14 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -27,9 +35,8 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { ReservationStatusBadge } from "@/components/shared/status-badge";
-import { ParkingLotName } from "@/features/parking-lots/components/parking-lot-name";
-import { useParkingLots } from "@/features/parking-lots/hooks";
-import { useMyReservations } from "@/features/reservations/hooks";
+import { useCancelReservation, useMyReservations } from "@/features/reservations/hooks";
+import type { Reservation } from "@/features/reservations/types";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import type { ReservationStatus } from "@/types/enums";
 
@@ -41,17 +48,56 @@ const ACTIVE_STATUSES: ReservationStatus[] = [
 ];
 const HISTORY_STATUSES: ReservationStatus[] = ["COMPLETED", "CANCELLED"];
 
+function CancelButton({ reservation }: { reservation: Reservation }) {
+  const [open, setOpen] = useState(false);
+  const cancelReservation = useCancelReservation(reservation.id);
+
+  if (reservation.status !== "CONFIRMED") return null;
+
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="text-destructive"
+        onClick={() => setOpen(true)}
+      >
+        Cancel
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel this reservation?</DialogTitle>
+            <DialogDescription>
+              Slot {reservation.slot.slotNumber} at {reservation.lot.name} will be released.
+              This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Keep Reservation
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={cancelReservation.isPending}
+              onClick={() =>
+                cancelReservation.mutate(undefined, { onSuccess: () => setOpen(false) })
+              }
+            >
+              Cancel Reservation
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 export default function MyReservationsPage() {
   const { data: reservations, isLoading, isError, error, refetch } = useMyReservations();
-  const { data: lots } = useParkingLots();
   const [tab, setTab] = useState<"active" | "history">("active");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-
-  const lotNameById = useMemo(
-    () => new Map(lots?.map((lot) => [lot.id, lot.name]) ?? []),
-    [lots],
-  );
 
   const filtered = useMemo(() => {
     if (!reservations) return [];
@@ -60,13 +106,10 @@ export default function MyReservationsPage() {
     return reservations.filter((r) => {
       if (!statuses.includes(r.status)) return false;
       if (statusFilter !== "all" && r.status !== statusFilter) return false;
-      if (query) {
-        const lotName = lotNameById.get(r.lotId)?.toLowerCase() ?? "";
-        if (!lotName.includes(query)) return false;
-      }
+      if (query && !r.lot.name.toLowerCase().includes(query)) return false;
       return true;
     });
-  }, [reservations, tab, statusFilter, search, lotNameById]);
+  }, [reservations, tab, statusFilter, search]);
 
   return (
     <div>
@@ -137,21 +180,24 @@ export default function MyReservationsPage() {
                   <div className="mb-1 flex items-center gap-2">
                     <ReservationStatusBadge status={r.status} />
                     <span className="text-xs text-muted-foreground">
-                      <ParkingLotName lotId={r.lotId} />
+                      {r.lot.name} · Slot {r.slot.slotNumber} · {r.slot.floor.name}
                     </span>
                   </div>
                   <p className="text-sm text-muted-foreground">
                     {formatDateTime(r.startTime)} → {formatDateTime(r.endTime)}
                   </p>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  render={<Link href={`/reservations/${r.id}`} />}
-                  nativeButton={false}
-                >
-                  View Details
-                </Button>
+                <div className="flex items-center gap-2">
+                  <CancelButton reservation={r} />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    render={<Link href={`/reservations/${r.id}`} />}
+                    nativeButton={false}
+                  >
+                    View Details
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
@@ -172,9 +218,7 @@ export default function MyReservationsPage() {
               {filtered.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell>{formatDateTime(r.startTime)}</TableCell>
-                  <TableCell>
-                    <ParkingLotName lotId={r.lotId} />
-                  </TableCell>
+                  <TableCell>{r.lot.name}</TableCell>
                   <TableCell>
                     {r.payment ? formatCurrency(r.payment.amount) : formatCurrency(r.totalPrice)}
                   </TableCell>

@@ -1,18 +1,28 @@
-import type { ReservationBase } from "@/features/reservations/types";
-import type { Challan, Payment } from "@/features/reservations/types";
+import type {
+  Challan,
+  Payment,
+  ReservationBase,
+  ReservationLot,
+  ReservationSlot,
+} from "@/features/reservations/types";
 
 export interface ScanQrPayload {
   token: string;
 }
 
+export interface CheckpointReservation extends ReservationBase {
+  lot: ReservationLot;
+  slot: ReservationSlot;
+}
+
 export interface CheckInResponse {
-  reservation: ReservationBase;
+  reservation: CheckpointReservation;
   checkoutQrToken: string;
   checkoutQrCodeImage: string;
 }
 
 export interface CheckOutResponse {
-  reservation: ReservationBase;
+  reservation: CheckpointReservation;
   payment: Payment;
   challans: Challan[];
 }

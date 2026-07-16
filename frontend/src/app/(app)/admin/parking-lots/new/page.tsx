@@ -1,10 +1,11 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Plus, Trash2 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useEffect, useState } from "react";
+import { useFieldArray, useForm } from "react-hook-form";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,6 +18,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -25,6 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { PageHeader } from "@/components/shared/page-header";
 import { useAuth } from "@/features/auth/auth-provider";
 import { useCreateParkingLot } from "@/features/parking-lots/hooks";
@@ -37,13 +40,23 @@ const LocationPickerMap = dynamic(
   { ssr: false, loading: () => <Skeleton className="h-full w-full rounded-xl" /> },
 );
 
-const schema = z.object({
-  name: z.string().min(1, "Name is required"),
-  address: z.string().min(1, "Address is required"),
+const floorSchema = z.object({
+  name: z.string().min(1, "Floor name is required"),
+  floorNumber: z.number().int(),
   rows: z.number().int().min(1).max(MAX_ROWS),
   columns: z.number().int().min(1).max(MAX_COLUMNS),
   defaultSlotPrice: z.number().positive("Must be greater than 0"),
+});
+
+const schema = z.object({
+  name: z.string().min(1, "Name is required"),
+  address: z.string().min(1, "Address is required"),
   managerId: z.string().optional(),
+  sameCapacityForAll: z.boolean(),
+  sharedRows: z.number().int().min(1).max(MAX_ROWS),
+  sharedColumns: z.number().int().min(1).max(MAX_COLUMNS),
+  sharedPrice: z.number().positive(),
+  floors: z.array(floorSchema).min(1, "At least one floor is required"),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -62,16 +75,54 @@ export default function NewParkingLotPage() {
     defaultValues: {
       name: "",
       address: "",
-      rows: 5,
-      columns: 10,
-      defaultSlotPrice: 5,
+      sameCapacityForAll: true,
+      sharedRows: 5,
+      sharedColumns: 10,
+      sharedPrice: 5,
+      floors: [{ name: "Ground Floor", floorNumber: 0, rows: 5, columns: 10, defaultSlotPrice: 5 }],
     },
   });
 
-  const rows = form.watch("rows");
-  const columns = form.watch("columns");
-  const totalSlots = (Number(rows) || 0) * (Number(columns) || 0);
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "floors",
+  });
+
+  const sameCapacityForAll = form.watch("sameCapacityForAll");
+  const sharedRows = form.watch("sharedRows");
+  const sharedColumns = form.watch("sharedColumns");
+  const sharedPrice = form.watch("sharedPrice");
+  const floorsValue = form.watch("floors");
+
+  // Keep every floor's capacity in sync with the shared inputs while "same for all" is on,
+  // so the payload sent on submit is always a fully explicit per-floor array either way.
+  useEffect(() => {
+    if (!sameCapacityForAll) return;
+    fields.forEach((_, index) => {
+      form.setValue(`floors.${index}.rows`, sharedRows);
+      form.setValue(`floors.${index}.columns`, sharedColumns);
+      form.setValue(`floors.${index}.defaultSlotPrice`, sharedPrice);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sameCapacityForAll, sharedRows, sharedColumns, sharedPrice, fields.length]);
+
+  const totalSlots = (floorsValue ?? []).reduce(
+    (sum, f) => sum + (Number(f.rows) || 0) * (Number(f.columns) || 0),
+    0,
+  );
   const exceedsMax = totalSlots > MAX_TOTAL_SLOTS;
+
+  function addFloor() {
+    const nextFloorNumber =
+      Math.max(...(floorsValue ?? []).map((f) => f.floorNumber), -1) + 1;
+    append({
+      name: `Floor ${nextFloorNumber + 1}`,
+      floorNumber: nextFloorNumber,
+      rows: sameCapacityForAll ? sharedRows : 5,
+      columns: sameCapacityForAll ? sharedColumns : 10,
+      defaultSlotPrice: sameCapacityForAll ? sharedPrice : 5,
+    });
+  }
 
   function onSubmit(values: FormValues) {
     createLot.mutate(
@@ -80,10 +131,14 @@ export default function NewParkingLotPage() {
         address: values.address,
         latitude: position[0],
         longitude: position[1],
-        rows: values.rows,
-        columns: values.columns,
-        defaultSlotPrice: values.defaultSlotPrice,
         managerId: user?.role === "ADMIN" ? values.managerId : undefined,
+        floors: values.floors.map((f) => ({
+          name: f.name,
+          floorNumber: f.floorNumber,
+          rows: f.rows,
+          columns: f.columns,
+          defaultSlotPrice: f.defaultSlotPrice,
+        })),
       },
       { onSuccess: (lot) => router.push(`/parking-lots/${lot.id}`) },
     );
@@ -122,64 +177,6 @@ export default function NewParkingLotPage() {
                   </FormItem>
                 )}
               />
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="rows"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Rows</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          {...field}
-                          onChange={(e) => field.onChange(Number(e.target.value))}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="columns"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Columns</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          {...field}
-                          onChange={(e) => field.onChange(Number(e.target.value))}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <p className={exceedsMax ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>
-                Total Slots: {totalSlots}
-                {exceedsMax && ` — exceeds the maximum of ${MAX_TOTAL_SLOTS}`}
-              </p>
-              <FormField
-                control={form.control}
-                name="defaultSlotPrice"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Default Hourly Rate ($)</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        {...field}
-                        onChange={(e) => field.onChange(Number(e.target.value))}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
               {user?.role === "ADMIN" && (
                 <FormField
                   control={form.control}
@@ -205,8 +202,202 @@ export default function NewParkingLotPage() {
                   )}
                 />
               )}
+
+              <div className="flex items-center justify-between border-t border-border pt-4">
+                <div>
+                  <Label>Use same capacity for all floors</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Turn off to set rows, columns, and price individually per floor.
+                  </p>
+                </div>
+                <Switch
+                  checked={sameCapacityForAll}
+                  onCheckedChange={(v) => form.setValue("sameCapacityForAll", v)}
+                />
+              </div>
+
+              {sameCapacityForAll && (
+                <div className="grid grid-cols-3 gap-3">
+                  <FormField
+                    control={form.control}
+                    name="sharedRows"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Rows</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            {...field}
+                            onChange={(e) => field.onChange(Number(e.target.value))}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="sharedColumns"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Columns</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            {...field}
+                            onChange={(e) => field.onChange(Number(e.target.value))}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="sharedPrice"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Rate ($/hr)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            {...field}
+                            onChange={(e) => field.onChange(Number(e.target.value))}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              )}
+
+              <div className="space-y-3 border-t border-border pt-4">
+                <div className="flex items-center justify-between">
+                  <Label>Floors</Label>
+                  <Button type="button" variant="outline" size="sm" onClick={addFloor}>
+                    <Plus className="size-3.5" /> Add Floor
+                  </Button>
+                </div>
+
+                {fields.map((fieldItem, index) => (
+                  <div key={fieldItem.id} className="space-y-2 rounded-lg border border-border p-3">
+                    <div className="flex items-center gap-2">
+                      <FormField
+                        control={form.control}
+                        name={`floors.${index}.name`}
+                        render={({ field }) => (
+                          <FormItem className="flex-1">
+                            <FormControl>
+                              <Input placeholder="Floor name" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name={`floors.${index}.floorNumber`}
+                        render={({ field }) => (
+                          <FormItem className="w-24">
+                            <FormControl>
+                              <Input
+                                type="number"
+                                placeholder="#"
+                                {...field}
+                                onChange={(e) => field.onChange(Number(e.target.value))}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      {fields.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-destructive"
+                          onClick={() => remove(index)}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      )}
+                    </div>
+
+                    {sameCapacityForAll ? (
+                      <p className="text-xs text-muted-foreground">
+                        {sharedRows} rows × {sharedColumns} columns ·{" "}
+                        {sharedRows * sharedColumns} slots @ ${sharedPrice}/hr
+                      </p>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-2">
+                        <FormField
+                          control={form.control}
+                          name={`floors.${index}.rows`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">Rows</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  {...field}
+                                  onChange={(e) => field.onChange(Number(e.target.value))}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name={`floors.${index}.columns`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">Columns</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  {...field}
+                                  onChange={(e) => field.onChange(Number(e.target.value))}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name={`floors.${index}.defaultSlotPrice`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">Rate ($/hr)</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  {...field}
+                                  onChange={(e) => field.onChange(Number(e.target.value))}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <p className={exceedsMax ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>
+                Total Slots: {totalSlots}
+                {exceedsMax && ` — exceeds the maximum of ${MAX_TOTAL_SLOTS}`}
+              </p>
               <p className="text-xs text-muted-foreground">
-                Slot layout cannot be changed after creation.
+                Floor layout cannot be changed after creation — add more floors later from the
+                lot&apos;s edit page if needed.
               </p>
               <div className="flex justify-end gap-2 border-t border-border pt-4">
                 <Button type="button" variant="outline" onClick={() => router.back()}>

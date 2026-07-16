@@ -1,18 +1,25 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QrCode } from "@/components/shared/qr-code";
 import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { ReservationStatusBadge } from "@/components/shared/status-badge";
-import { useParkingLot } from "@/features/parking-lots/hooks";
-import { useParkingSlot } from "@/features/parking-slots/hooks";
 import { ReservationTimeline } from "@/features/reservations/components/reservation-timeline";
 import {
+  useCancelReservation,
   useConfirmCheckoutPayment,
   useFailCheckoutPayment,
   useReservation,
@@ -26,10 +33,10 @@ export default function ReservationDetailPage({
 }) {
   const { id } = use(params);
   const { data: reservation, isLoading, isError, error, refetch } = useReservation(id);
-  const { data: lot } = useParkingLot(reservation?.lotId ?? "");
-  const { data: slot } = useParkingSlot(reservation?.slotId ?? "");
   const confirmPayment = useConfirmCheckoutPayment(id);
   const failPayment = useFailCheckoutPayment(id);
+  const cancelReservation = useCancelReservation(id);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
 
   if (isLoading) {
     return (
@@ -52,8 +59,8 @@ export default function ReservationDetailPage({
   return (
     <div className="space-y-6">
       <PageHeader
-        title={lot?.name ?? "Reservation"}
-        description={`Slot ${slot?.slotNumber ?? reservation.slotId}`}
+        title={reservation.lot.name}
+        description={`Slot ${reservation.slot.slotNumber} · ${reservation.slot.floor.name}`}
         actions={<ReservationStatusBadge status={reservation.status} />}
       />
 
@@ -78,7 +85,7 @@ export default function ReservationDetailPage({
                 <Row label="Actual Checkout" value={formatDateTime(reservation.checkedOutAt)} />
               )}
               <Row label="Duration" value={formatDuration(durationMinutes)} />
-              {slot && <Row label="Hourly Rate" value={formatCurrency(slot.basePrice)} />}
+              <Row label="Hourly Rate" value={formatCurrency(reservation.slot.basePrice)} />
             </div>
 
             {reservation.challans.length > 0 && (
@@ -136,6 +143,18 @@ export default function ReservationDetailPage({
               </div>
             )}
 
+            {reservation.status === "CONFIRMED" && (
+              <div className="border-t border-border pt-4">
+                <Button
+                  variant="outline"
+                  className="w-full text-destructive"
+                  onClick={() => setShowCancelDialog(true)}
+                >
+                  Cancel Reservation
+                </Button>
+              </div>
+            )}
+
             {activeQr && (
               <div className="flex flex-col items-center gap-2 border-t border-border pt-4">
                 <p className="text-sm text-muted-foreground">
@@ -152,6 +171,34 @@ export default function ReservationDetailPage({
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel this reservation?</DialogTitle>
+            <DialogDescription>
+              Slot {reservation.slot.slotNumber} will be released and the check-in QR
+              invalidated. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCancelDialog(false)}>
+              Keep Reservation
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={cancelReservation.isPending}
+              onClick={() =>
+                cancelReservation.mutate(undefined, {
+                  onSuccess: () => setShowCancelDialog(false),
+                })
+              }
+            >
+              Cancel Reservation
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

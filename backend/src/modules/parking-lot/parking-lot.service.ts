@@ -1,18 +1,23 @@
 import {
   BadRequestException,
+  ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, ParkingLot, SlotStatus } from '@prisma/client';
+import { Prisma, ParkingLot, Role, SlotStatus } from '@prisma/client';
 import { AuditService } from '../../common/audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 import {
+  CreateFloorInputDto,
   CreateParkingLotDto,
   MAX_TOTAL_SLOTS,
 } from './dto/create-parking-lot.dto';
 import { FindNearbyLotsDto } from './dto/find-nearby-lots.dto';
 import { NearbyParkingLotDto } from './dto/nearby-parking-lot.dto';
+import { ParkingFloorResponseDto } from './dto/parking-floor-response.dto';
 import { UpdateParkingLotDto } from './dto/update-parking-lot.dto';
 import { LocationService } from './location.service';
 import { MapsService } from './maps.service';
@@ -29,12 +34,13 @@ interface NearbyLotRow {
   distanceKm: number;
 }
 
-export interface LotAvailability {
+export interface LotEnrichment {
+  totalSlots: number;
   availableSlots: number;
   minHourlyRate: string | null;
 }
 
-export type ParkingLotWithAvailability = ParkingLot & LotAvailability;
+export type ParkingLotWithAvailability = ParkingLot & LotEnrichment;
 
 @Injectable()
 export class ParkingLotService {
@@ -52,12 +58,8 @@ export class ParkingLotService {
     requestingManagerId: string,
     requestingUserId: string,
   ): Promise<ParkingLot> {
-    const totalSlots = dto.rows * dto.columns;
-    if (totalSlots > MAX_TOTAL_SLOTS) {
-      throw new BadRequestException(
-        `rows × columns (${totalSlots}) exceeds the maximum of ${MAX_TOTAL_SLOTS} slots per lot`,
-      );
-    }
+    this.assertUniqueFloorNumbers(dto.floors);
+    const totalSlots = this.assertWithinSlotLimit(dto.floors);
 
     const verification = await this.locationService.verifyAddress(dto.address);
     if (!verification.verified) {
@@ -74,19 +76,30 @@ export class ParkingLotService {
           latitude: dto.latitude,
           longitude: dto.longitude,
           managerId: dto.managerId ?? requestingManagerId,
-          rows: dto.rows,
-          columns: dto.columns,
         },
       });
 
-      await tx.parkingSlot.createMany({
-        data: this.buildSlotGrid(
-          lot.id,
-          dto.rows,
-          dto.columns,
-          dto.defaultSlotPrice,
-        ),
-      });
+      for (const floorInput of dto.floors) {
+        const floor = await tx.parkingFloor.create({
+          data: {
+            lotId: lot.id,
+            name: floorInput.name,
+            floorNumber: floorInput.floorNumber,
+            rows: floorInput.rows,
+            columns: floorInput.columns,
+          },
+        });
+
+        await tx.parkingSlot.createMany({
+          data: this.buildSlotGrid(
+            lot.id,
+            floor.id,
+            floorInput.rows,
+            floorInput.columns,
+            floorInput.defaultSlotPrice,
+          ),
+        });
+      }
 
       await this.auditService.log(
         {
@@ -94,7 +107,7 @@ export class ParkingLotService {
           entityId: lot.id,
           action: 'PARKING_LOT_CREATED',
           userId: requestingUserId,
-          metadata: { rows: dto.rows, columns: dto.columns, totalSlots },
+          metadata: { floorCount: dto.floors.length, totalSlots },
         },
         tx,
       );
@@ -103,8 +116,143 @@ export class ParkingLotService {
     });
   }
 
+  async createFloor(
+    lotId: string,
+    dto: CreateFloorInputDto,
+    requestingUser: AuthenticatedUser,
+  ): Promise<ParkingFloorResponseDto> {
+    const lot = await this.prisma.parkingLot.findUnique({
+      where: { id: lotId },
+    });
+    if (!lot) {
+      throw new NotFoundException(`Parking lot ${lotId} not found`);
+    }
+    if (
+      requestingUser.role === Role.MANAGER &&
+      lot.managerId !== requestingUser.userId
+    ) {
+      throw new ForbiddenException('You do not manage this parking lot');
+    }
+
+    const totalSlots = dto.rows * dto.columns;
+    if (totalSlots > MAX_TOTAL_SLOTS) {
+      throw new BadRequestException(
+        `rows × columns (${totalSlots}) exceeds the maximum of ${MAX_TOTAL_SLOTS} slots per floor`,
+      );
+    }
+
+    try {
+      const floor = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.parkingFloor.create({
+          data: {
+            lotId,
+            name: dto.name,
+            floorNumber: dto.floorNumber,
+            rows: dto.rows,
+            columns: dto.columns,
+          },
+        });
+
+        await tx.parkingSlot.createMany({
+          data: this.buildSlotGrid(
+            lotId,
+            created.id,
+            dto.rows,
+            dto.columns,
+            dto.defaultSlotPrice,
+          ),
+        });
+
+        await this.auditService.log(
+          {
+            entityType: 'ParkingFloor',
+            entityId: created.id,
+            action: 'PARKING_FLOOR_CREATED',
+            userId: requestingUser.userId,
+            metadata: { lotId, rows: dto.rows, columns: dto.columns },
+          },
+          tx,
+        );
+
+        return created;
+      });
+
+      return {
+        ...floor,
+        totalSlots: floor.rows * floor.columns,
+        availableSlots: floor.rows * floor.columns,
+      };
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          `Floor number ${dto.floorNumber} already exists for this lot`,
+        );
+      }
+      throw error;
+    }
+  }
+
+  async findFloors(lotId: string): Promise<ParkingFloorResponseDto[]> {
+    const lot = await this.prisma.parkingLot.findUnique({
+      where: { id: lotId },
+    });
+    if (!lot) {
+      throw new NotFoundException(`Parking lot ${lotId} not found`);
+    }
+
+    const floors = await this.prisma.parkingFloor.findMany({
+      where: { lotId },
+      orderBy: { floorNumber: 'asc' },
+    });
+
+    const availableByFloor = await this.prisma.parkingSlot.groupBy({
+      by: ['floorId'],
+      where: { floorId: { in: floors.map((f) => f.id) }, status: SlotStatus.AVAILABLE },
+      _count: { _all: true },
+    });
+    const availabilityMap = new Map(
+      availableByFloor.map((row) => [row.floorId, row._count._all]),
+    );
+
+    return floors.map((floor) => ({
+      ...floor,
+      totalSlots: floor.rows * floor.columns,
+      availableSlots: availabilityMap.get(floor.id) ?? 0,
+    }));
+  }
+
+  private assertUniqueFloorNumbers(floors: CreateFloorInputDto[]): void {
+    const seen = new Set<number>();
+    for (const floor of floors) {
+      if (seen.has(floor.floorNumber)) {
+        throw new BadRequestException(
+          `Duplicate floorNumber ${floor.floorNumber} in floors[]`,
+        );
+      }
+      seen.add(floor.floorNumber);
+    }
+  }
+
+  private assertWithinSlotLimit(floors: CreateFloorInputDto[]): number {
+    let totalSlots = 0;
+    for (const floor of floors) {
+      const floorSlots = floor.rows * floor.columns;
+      if (floorSlots > MAX_TOTAL_SLOTS) {
+        throw new BadRequestException(
+          `rows × columns (${floorSlots}) for floor "${floor.name}" exceeds the maximum of ${MAX_TOTAL_SLOTS} slots per floor`,
+        );
+      }
+      totalSlots += floorSlots;
+    }
+    return totalSlots;
+  }
+
   private buildSlotGrid(
     lotId: string,
+    floorId: string,
     rows: number,
     columns: number,
     basePrice: number,
@@ -114,7 +262,12 @@ export class ParkingLotService {
     for (let row = 1; row <= rows; row += 1) {
       const label = rowLabel(row);
       for (let col = 1; col <= columns; col += 1) {
-        slots.push({ lotId, slotNumber: `${label}${col}`, basePrice });
+        slots.push({
+          lotId,
+          floorId,
+          slotNumber: `${label}${col}`,
+          basePrice,
+        });
       }
     }
 
@@ -123,11 +276,11 @@ export class ParkingLotService {
 
   /**
    * Slot counts/pricing aren't denormalized onto ParkingLot, so every list/detail response
-   * enriches with a single grouped aggregate query rather than one query per lot.
+   * enriches with grouped aggregate queries rather than one query per lot.
    */
   private async getAvailabilityMap(
     lotIds: string[],
-  ): Promise<Map<string, LotAvailability>> {
+  ): Promise<Map<string, { availableSlots: number; minHourlyRate: string | null }>> {
     if (lotIds.length === 0) {
       return new Map();
     }
@@ -150,13 +303,35 @@ export class ParkingLotService {
     );
   }
 
-  private mergeAvailability(
+  private async getTotalSlotsMap(lotIds: string[]): Promise<Map<string, number>> {
+    if (lotIds.length === 0) {
+      return new Map();
+    }
+
+    const floors = await this.prisma.parkingFloor.findMany({
+      where: { lotId: { in: lotIds } },
+      select: { lotId: true, rows: true, columns: true },
+    });
+
+    const totals = new Map<string, number>();
+    for (const floor of floors) {
+      totals.set(
+        floor.lotId,
+        (totals.get(floor.lotId) ?? 0) + floor.rows * floor.columns,
+      );
+    }
+    return totals;
+  }
+
+  private mergeEnrichment(
     lot: ParkingLot,
-    availability: Map<string, LotAvailability>,
+    availability: Map<string, { availableSlots: number; minHourlyRate: string | null }>,
+    totalSlots: Map<string, number>,
   ): ParkingLotWithAvailability {
     const entry = availability.get(lot.id);
     return {
       ...lot,
+      totalSlots: totalSlots.get(lot.id) ?? 0,
       availableSlots: entry?.availableSlots ?? 0,
       minHourlyRate: entry?.minHourlyRate ?? null,
     };
@@ -164,8 +339,12 @@ export class ParkingLotService {
 
   async findAll(): Promise<ParkingLotWithAvailability[]> {
     const lots = await this.prisma.parkingLot.findMany();
-    const availability = await this.getAvailabilityMap(lots.map((l) => l.id));
-    return lots.map((lot) => this.mergeAvailability(lot, availability));
+    const lotIds = lots.map((l) => l.id);
+    const [availability, totalSlots] = await Promise.all([
+      this.getAvailabilityMap(lotIds),
+      this.getTotalSlotsMap(lotIds),
+    ]);
+    return lots.map((lot) => this.mergeEnrichment(lot, availability, totalSlots));
   }
 
   async findOne(id: string): Promise<ParkingLotWithAvailability> {
@@ -173,8 +352,11 @@ export class ParkingLotService {
     if (!lot) {
       throw new NotFoundException(`Parking lot ${id} not found`);
     }
-    const availability = await this.getAvailabilityMap([id]);
-    return this.mergeAvailability(lot, availability);
+    const [availability, totalSlots] = await Promise.all([
+      this.getAvailabilityMap([id]),
+      this.getTotalSlotsMap([id]),
+    ]);
+    return this.mergeEnrichment(lot, availability, totalSlots);
   }
 
   async update(id: string, dto: UpdateParkingLotDto): Promise<ParkingLot> {
@@ -223,9 +405,11 @@ export class ParkingLotService {
       latitude: row.latitude,
       longitude: row.longitude,
     }));
-    const [etas, availability] = await Promise.all([
+    const lotIds = rows.map((row) => row.id);
+    const [etas, availability, totalSlots] = await Promise.all([
       this.mapsService.getDrivingEtas(origin, destinations),
-      this.getAvailabilityMap(rows.map((row) => row.id)),
+      this.getAvailabilityMap(lotIds),
+      this.getTotalSlotsMap(lotIds),
     ]);
 
     return rows.map((row, index) => ({
@@ -237,6 +421,7 @@ export class ParkingLotService {
       distanceKm: Math.round(Number(row.distanceKm) * 100) / 100,
       drivingDistanceKm: etas[index].distanceKm,
       etaMinutes: etas[index].durationMinutes,
+      totalSlots: totalSlots.get(row.id) ?? 0,
       availableSlots: availability.get(row.id)?.availableSlots ?? 0,
       minHourlyRate: availability.get(row.id)?.minHourlyRate ?? null,
     }));

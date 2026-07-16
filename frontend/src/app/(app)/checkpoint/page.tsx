@@ -9,13 +9,20 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/shared/page-header";
 import { QrScanner } from "@/components/checkpoint/qr-scanner";
 import { useCheckIn, useCheckOut } from "@/features/checkpoint/hooks";
-import { useParkingSlot } from "@/features/parking-slots/hooks";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { formatCurrency } from "@/lib/format";
 
 type Mode = "check-in" | "check-out";
 type Result =
-  | { kind: "success"; mode: Mode; slotId: string; message: string; extra?: string }
+  | {
+      kind: "success";
+      mode: Mode;
+      lotName: string;
+      slotNumber: string;
+      floorName: string;
+      message: string;
+      extra?: string;
+    }
   | { kind: "error"; message: string };
 
 export default function CheckpointPage() {
@@ -24,7 +31,6 @@ export default function CheckpointPage() {
   const [result, setResult] = useState<Result | null>(null);
   const checkIn = useCheckIn();
   const checkOut = useCheckOut();
-  const resultSlot = useParkingSlot(result?.kind === "success" ? result.slotId : "");
 
   function handleScan(token: string) {
     if (checkIn.isPending || checkOut.isPending || result) return;
@@ -37,7 +43,9 @@ export default function CheckpointPage() {
             setResult({
               kind: "success",
               mode,
-              slotId: data.reservation.slotId,
+              lotName: data.reservation.lot.name,
+              slotNumber: data.reservation.slot.slotNumber,
+              floorName: data.reservation.slot.floor.name,
               message: "Checked in successfully",
             }),
           onError: (error) => setResult({ kind: "error", message: getApiErrorMessage(error) }),
@@ -51,7 +59,9 @@ export default function CheckpointPage() {
             setResult({
               kind: "success",
               mode,
-              slotId: data.reservation.slotId,
+              lotName: data.reservation.lot.name,
+              slotNumber: data.reservation.slot.slotNumber,
+              floorName: data.reservation.slot.floor.name,
               message: "Checkout initiated — payment due",
               extra: `Final charge: ${formatCurrency(data.payment.amount)}`,
             }),
@@ -86,21 +96,29 @@ export default function CheckpointPage() {
           <QrScanner active={!result} onScan={handleScan} />
           <div className="mt-4 space-y-2">
             <p className="text-center text-sm text-muted-foreground">
-              Or enter the code manually
+              Or enter the code manually — a USB QR scanner types the code here and presses
+              Enter automatically
             </p>
-            <div className="flex gap-2">
+            <form
+              className="flex gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (manualToken) handleScan(manualToken);
+              }}
+            >
               <Input
                 value={manualToken}
                 onChange={(e) => setManualToken(e.target.value)}
                 placeholder="Reservation token"
+                autoFocus
               />
               <Button
-                onClick={() => manualToken && handleScan(manualToken)}
+                type="submit"
                 disabled={!manualToken || checkIn.isPending || checkOut.isPending}
               >
                 Submit
               </Button>
-            </div>
+            </form>
           </div>
         </>
       )}
@@ -117,7 +135,7 @@ export default function CheckpointPage() {
               <p className="font-medium">{result.message}</p>
               {result.kind === "success" && (
                 <p className="text-sm text-muted-foreground">
-                  Slot {resultSlot.data?.slotNumber ?? result.slotId} is now{" "}
+                  {result.lotName} · Slot {result.slotNumber} · {result.floorName} is now{" "}
                   {result.mode === "check-in" ? "Occupied" : "awaiting payment"}
                 </p>
               )}

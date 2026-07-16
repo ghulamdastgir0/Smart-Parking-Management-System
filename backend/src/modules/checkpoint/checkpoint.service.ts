@@ -26,6 +26,15 @@ import { ChallanResponseDto } from '../reservation/dto/reservation-response.dto'
 
 type QrCodeWithReservation = QrCode & { reservation: Reservation };
 
+const RESERVATION_LOT_SLOT_FLOOR_INCLUDE = {
+  lot: true,
+  slot: { include: { floor: true } },
+} satisfies Prisma.ReservationInclude;
+
+export type ReservationWithLotSlotFloor = Prisma.ReservationGetPayload<{
+  include: typeof RESERVATION_LOT_SLOT_FLOOR_INCLUDE;
+}>;
+
 @Injectable()
 export class CheckpointService {
   constructor(
@@ -39,7 +48,7 @@ export class CheckpointService {
     token: string,
     staffUserId: string,
   ): Promise<{
-    reservation: Reservation;
+    reservation: ReservationWithLotSlotFloor;
     checkoutQrToken: string;
     checkoutQrCodeImage: string;
   }> {
@@ -61,6 +70,7 @@ export class CheckpointService {
       const updatedReservation = await tx.reservation.update({
         where: { id: reservation.id },
         data: { status: ReservationStatus.CHECKED_IN, checkedInAt: new Date() },
+        include: RESERVATION_LOT_SLOT_FLOOR_INCLUDE,
       });
 
       await tx.parkingSlot.update({
@@ -114,7 +124,7 @@ export class CheckpointService {
     token: string,
     staffUserId: string,
   ): Promise<{
-    reservation: Reservation;
+    reservation: ReservationWithLotSlotFloor;
     payment: Payment;
     challans: ChallanResponseDto[];
   }> {
@@ -144,6 +154,7 @@ export class CheckpointService {
       const updatedReservation = await tx.reservation.update({
         where: { id: reservation.id },
         data: { status: ReservationStatus.PENDING_PAYMENT, checkedOutAt },
+        include: RESERVATION_LOT_SLOT_FLOOR_INCLUDE,
       });
 
       const totalCharge = await this.billingService.calculateFinalCharge(
@@ -204,6 +215,16 @@ export class CheckpointService {
     token: string,
     expectedType: QrCodeType,
   ): Promise<QrCodeWithReservation> {
+    // Row-lock the QR row before reading it, so two concurrent scans of the same token
+    // (e.g. two managers, or a double-tap) serialize instead of both passing the ACTIVE
+    // check before either commits USED.
+    const locked = await tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM "QrCode" WHERE token = ${token} FOR UPDATE
+    `;
+    if (locked.length === 0) {
+      throw new NotFoundException('QR code not recognized');
+    }
+
     const qrCode = await tx.qrCode.findUnique({
       where: { token },
       include: { reservation: true },

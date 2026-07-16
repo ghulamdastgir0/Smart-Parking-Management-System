@@ -242,7 +242,7 @@ function StaffDashboard() {
                     <p className="text-xs text-muted-foreground">{lot.address}</p>
                   </div>
                   <Badge variant={lot.availableSlots > 0 ? "success" : "destructive"}>
-                    {lot.availableSlots} / {lot.rows * lot.columns} available
+                    {lot.availableSlots} / {lot.totalSlots} available
                   </Badge>
                 </Link>
               ))}

@@ -85,13 +85,12 @@ model ParkingLot {
   latitude    Float // For Leaflet / OpenStreetMap searches
   longitude   Float
   managerId   String
-  rows        Int // Parking layout: number of row bands (A, B, C, ...)
-  columns     Int // Parking layout: slots per row (1..columns)
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
   // Relations
   manager       User           @relation("ManagerLots", fields: [managerId], references: [id])
+  floors        ParkingFloor[]
   slots         ParkingSlot[]
   reservations  Reservation[]
   occupancyLogs OccupancyLog[]
@@ -99,9 +98,32 @@ model ParkingLot {
   @@index([latitude, longitude]) // Fast geospatial bounds filtering
 }
 
+// A lot's parking layout is defined per floor — different floors commonly have different
+// capacity (e.g. a smaller rooftop level vs a full basement), so rows/columns live here
+// rather than on ParkingLot.
+model ParkingFloor {
+  id          String        @id @default(uuid())
+  lotId       String
+  name        String // e.g., "Ground Floor", "Basement-1", "Floor-2"
+  floorNumber Int // Sort/display order; also the uniqueness key within a lot
+  rows        Int // Parking layout: number of row bands (A, B, C, ...) on this floor
+  columns     Int // Parking layout: slots per row (1..columns) on this floor
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Relations
+  lot   ParkingLot    @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  slots ParkingSlot[]
+
+  @@unique([lotId, floorNumber])
+}
+
 model ParkingSlot {
   id           String        @id @default(uuid())
-  lotId        String
+  lotId        String // Denormalized from floor.lotId — keeps existing lot-scoped queries
+  // (search, availability aggregation, nearby search) unchanged now that floor is the
+  // direct parent.
+  floorId      String
   slotNumber   String // e.g., "A-10", "B-05"
   type         SlotType      @default(STANDARD)
   status       SlotStatus    @default(AVAILABLE)
@@ -111,9 +133,12 @@ model ParkingSlot {
 
   // Relations
   lot          ParkingLot    @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  floor        ParkingFloor  @relation(fields: [floorId], references: [id], onDelete: Cascade)
   reservations Reservation[]
 
-  @@unique([lotId, slotNumber]) // Prevents creating duplicate slots in the same lot
+  @@unique([floorId, slotNumber]) // Prevents duplicate slots on the same floor — slot
+  // numbering restarts per floor (each floor's grid begins at "A1"), so uniqueness is
+  // scoped to floor, not lot.
 }
 
 model Reservation {

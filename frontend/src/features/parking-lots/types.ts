@@ -5,12 +5,22 @@ export interface ParkingLot {
   latitude: number;
   longitude: number;
   managerId: string;
-  rows: number;
-  columns: number;
   createdAt: string;
   updatedAt: string;
+  totalSlots: number;
   availableSlots: number;
   minHourlyRate: string | null;
+}
+
+export interface ParkingFloor {
+  id: string;
+  lotId: string;
+  name: string;
+  floorNumber: number;
+  rows: number;
+  columns: number;
+  totalSlots: number;
+  availableSlots: number;
 }
 
 export interface NearbyParkingLot {
@@ -22,6 +32,7 @@ export interface NearbyParkingLot {
   distanceKm: number;
   drivingDistanceKm: number | null;
   etaMinutes: number | null;
+  totalSlots: number;
   availableSlots: number;
   minHourlyRate: string | null;
 }
@@ -32,15 +43,21 @@ export interface FindNearbyLotsParams {
   radiusKm?: number;
 }
 
+export interface FloorInput {
+  name: string;
+  floorNumber: number;
+  rows: number;
+  columns: number;
+  defaultSlotPrice: number;
+}
+
 export interface CreateParkingLotPayload {
   name: string;
   address: string;
   latitude: number;
   longitude: number;
   managerId?: string;
-  rows: number;
-  columns: number;
-  defaultSlotPrice: number;
+  floors: FloorInput[];
 }
 
 export interface UpdateParkingLotPayload {

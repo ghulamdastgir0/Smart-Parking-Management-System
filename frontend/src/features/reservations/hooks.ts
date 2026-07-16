@@ -7,7 +7,9 @@ import { reservationsApi } from "./api";
 import type { CreateReservationPayload } from "./types";
 
 export const reservationsKeys = {
+  all: ["reservations"] as const,
   mine: ["reservations", "mine"] as const,
+  byLot: (lotId: string) => ["reservations", "by-lot", lotId] as const,
   detail: (id: string) => ["reservations", id] as const,
 };
 
@@ -15,6 +17,14 @@ export function useMyReservations() {
   return useQuery({
     queryKey: reservationsKeys.mine,
     queryFn: reservationsApi.findMine,
+  });
+}
+
+export function useReservationsByLot(lotId: string) {
+  return useQuery({
+    queryKey: reservationsKeys.byLot(lotId),
+    queryFn: () => reservationsApi.findByLot(lotId),
+    enabled: Boolean(lotId),
   });
 }
 
@@ -33,7 +43,19 @@ export function useCreateReservation() {
     mutationFn: (payload: CreateReservationPayload) =>
       reservationsApi.create(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: reservationsKeys.mine });
+      queryClient.invalidateQueries({ queryKey: reservationsKeys.all });
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error)),
+  });
+}
+
+export function useCancelReservation(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => reservationsApi.cancel(id),
+    onSuccess: () => {
+      toast.success("Reservation cancelled");
+      queryClient.invalidateQueries({ queryKey: reservationsKeys.all });
     },
     onError: (error) => toast.error(getApiErrorMessage(error)),
   });
@@ -45,8 +67,7 @@ export function useConfirmCheckoutPayment(id: string) {
     mutationFn: () => reservationsApi.confirmCheckoutPayment(id),
     onSuccess: () => {
       toast.success("Payment confirmed — checkout complete");
-      queryClient.invalidateQueries({ queryKey: reservationsKeys.mine });
-      queryClient.invalidateQueries({ queryKey: reservationsKeys.detail(id) });
+      queryClient.invalidateQueries({ queryKey: reservationsKeys.all });
     },
     onError: (error) => toast.error(getApiErrorMessage(error)),
   });
@@ -58,7 +79,7 @@ export function useFailCheckoutPayment(id: string) {
     mutationFn: () => reservationsApi.failCheckoutPayment(id),
     onSuccess: () => {
       toast.error("Payment failed — you can retry checkout");
-      queryClient.invalidateQueries({ queryKey: reservationsKeys.detail(id) });
+      queryClient.invalidateQueries({ queryKey: reservationsKeys.all });
     },
     onError: (error) => toast.error(getApiErrorMessage(error)),
   });

@@ -2,15 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAuth } from "@/features/auth/auth-provider";
 import { cn } from "@/lib/utils";
-import { BOTTOM_NAV_ITEMS } from "./nav-items";
+import { BOTTOM_NAV_ITEMS, visibleNavItems } from "./nav-items";
 
 export function BottomNav() {
   const pathname = usePathname();
+  const { user } = useAuth();
+  const items = visibleNavItems(BOTTOM_NAV_ITEMS, user?.role);
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/80 lg:hidden">
-      {BOTTOM_NAV_ITEMS.map((item) => {
+      {items.map((item) => {
         const active = pathname.startsWith(item.href);
         const Icon = item.icon;
         return (

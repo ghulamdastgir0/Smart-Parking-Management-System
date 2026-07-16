@@ -23,9 +23,11 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
+import { CreateParkingFloorDto } from './dto/create-parking-floor.dto';
 import { CreateParkingLotDto } from './dto/create-parking-lot.dto';
 import { FindNearbyLotsDto } from './dto/find-nearby-lots.dto';
 import { NearbyParkingLotDto } from './dto/nearby-parking-lot.dto';
+import { ParkingFloorResponseDto } from './dto/parking-floor-response.dto';
 import { UpdateParkingLotDto } from './dto/update-parking-lot.dto';
 import {
   ParkingLotService,
@@ -128,5 +130,48 @@ export class ParkingLotController {
   @ApiResponse({ status: 404, description: 'Parking lot not found' })
   remove(@Param('id') id: string): Promise<ParkingLot> {
     return this.parkingLotService.remove(id);
+  }
+
+  @Get(':lotId/floors')
+  @ApiOperation({
+    summary: 'List the floors of a parking lot, with capacity and availability',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Floors for this lot',
+    type: [ParkingFloorResponseDto],
+  })
+  @ApiResponse({ status: 404, description: 'Parking lot not found' })
+  findFloors(
+    @Param('lotId') lotId: string,
+  ): Promise<ParkingFloorResponseDto[]> {
+    return this.parkingLotService.findFloors(lotId);
+  }
+
+  @Post(':lotId/floors')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.MANAGER)
+  @ApiOperation({
+    summary: 'Add a floor (and its slot grid) to an existing parking lot (Admin/Manager only)',
+    description:
+      'Managers may only add floors to lots they manage. Each floor has its own ' +
+      'rows/columns/defaultSlotPrice, since different floors commonly have different capacity.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Floor created',
+    type: ParkingFloorResponseDto,
+  })
+  @ApiResponse({ status: 403, description: 'Manager does not own this lot' })
+  @ApiResponse({ status: 404, description: 'Parking lot not found' })
+  @ApiResponse({ status: 409, description: 'Floor number already exists for this lot' })
+  createFloor(
+    @Param('lotId') lotId: string,
+    @Body() dto: CreateParkingFloorDto,
+    @Req() req: Request,
+  ): Promise<ParkingFloorResponseDto> {
+    const user = req.user as AuthenticatedUser;
+    return this.parkingLotService.createFloor(lotId, dto, user);
   }
 }

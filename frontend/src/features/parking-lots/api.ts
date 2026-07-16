@@ -2,7 +2,9 @@ import { apiClient } from "@/lib/api-client";
 import type {
   CreateParkingLotPayload,
   FindNearbyLotsParams,
+  FloorInput,
   NearbyParkingLot,
+  ParkingFloor,
   ParkingLot,
   UpdateParkingLotPayload,
 } from "./types";
@@ -31,4 +33,14 @@ export const parkingLotsApi = {
 
   remove: (id: string) =>
     apiClient.delete<ParkingLot>(`/parking-lots/${id}`).then((res) => res.data),
+
+  findFloors: (lotId: string) =>
+    apiClient
+      .get<ParkingFloor[]>(`/parking-lots/${lotId}/floors`)
+      .then((res) => res.data),
+
+  createFloor: (lotId: string, payload: FloorInput) =>
+    apiClient
+      .post<ParkingFloor>(`/parking-lots/${lotId}/floors`, payload)
+      .then((res) => res.data),
 };

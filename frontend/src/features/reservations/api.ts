@@ -16,8 +16,16 @@ export const reservationsApi = {
   findMine: () =>
     apiClient.get<Reservation[]>("/reservations/mine").then((res) => res.data),
 
+  findByLot: (lotId: string) =>
+    apiClient
+      .get<Reservation[]>("/reservations", { params: { lotId } })
+      .then((res) => res.data),
+
   findOne: (id: string) =>
     apiClient.get<Reservation>(`/reservations/${id}`).then((res) => res.data),
+
+  cancel: (id: string) =>
+    apiClient.post<Reservation>(`/reservations/${id}/cancel`).then((res) => res.data),
 
   confirmCheckoutPayment: (id: string) =>
     apiClient

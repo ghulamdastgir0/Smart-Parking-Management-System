@@ -1,8 +1,47 @@
+import type { SlotStatus, SlotType } from "@/types/enums";
 import type {
   ChallanType,
   PaymentStatus,
   ReservationStatus,
 } from "@/types/enums";
+
+// Mirrors the raw ParkingLot/ParkingFloor/ParkingSlot Prisma rows as embedded via
+// `include` on the backend (not the frontend's enriched ParkingLot, which adds
+// availableSlots/totalSlots/minHourlyRate that these embedded rows don't carry).
+export interface ReservationLot {
+  id: string;
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  managerId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReservationFloor {
+  id: string;
+  lotId: string;
+  name: string;
+  floorNumber: number;
+  rows: number;
+  columns: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReservationSlot {
+  id: string;
+  lotId: string;
+  floorId: string;
+  floor: ReservationFloor;
+  slotNumber: string;
+  type: SlotType;
+  status: SlotStatus;
+  basePrice: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface QrCode {
   id: string;
@@ -35,6 +74,13 @@ export interface Payment {
   createdAt: string;
 }
 
+export interface ReservationCustomer {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+}
+
 export interface ReservationBase {
   id: string;
   userId: string;
@@ -54,6 +100,9 @@ export interface Reservation extends ReservationBase {
   payment: Payment | null;
   qrCodes: QrCode[];
   challans: Challan[];
+  lot: ReservationLot;
+  slot: ReservationSlot;
+  user: ReservationCustomer;
 }
 
 export interface CreateReservationPayload {

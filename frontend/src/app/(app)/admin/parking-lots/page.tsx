@@ -90,7 +90,7 @@ export default function AdminParkingLotsPage() {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Address</TableHead>
-                <TableHead>Layout</TableHead>
+                <TableHead>Capacity</TableHead>
                 <TableHead>Available</TableHead>
                 <TableHead>Rate</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -103,9 +103,7 @@ export default function AdminParkingLotsPage() {
                   <TableCell className="max-w-xs truncate text-muted-foreground">
                     {lot.address}
                   </TableCell>
-                  <TableCell>
-                    {lot.rows} × {lot.columns} ({lot.rows * lot.columns})
-                  </TableCell>
+                  <TableCell>{lot.totalSlots} slots</TableCell>
                   <TableCell>
                     <Badge variant={lot.availableSlots > 0 ? "success" : "destructive"}>
                       {lot.availableSlots}

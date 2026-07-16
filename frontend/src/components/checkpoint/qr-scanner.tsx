@@ -3,6 +3,21 @@
 import { Html5Qrcode } from "html5-qrcode";
 import { useEffect, useId, useRef } from "react";
 
+async function stopAndClear(scanner: Html5Qrcode) {
+  try {
+    await scanner.stop();
+  } catch {
+    // Already stopped/never started — nothing to tear down.
+  }
+  try {
+    // clear() is synchronous and throws if a scan session is still transitioning; it's
+    // only cosmetic DOM cleanup at this point, so a failure here is safe to ignore.
+    scanner.clear();
+  } catch {
+    // ignore
+  }
+}
+
 export function QrScanner({
   active,
   onScan,
@@ -20,43 +35,38 @@ export function QrScanner({
   useEffect(() => {
     if (!active) return;
 
-    const scanner = new Html5Qrcode(elementId);
     let cancelled = false;
-    let isRunning = false;
+    const scanner = new Html5Qrcode(elementId);
 
-    scanner
+    // Chaining the teardown onto the start promise (rather than firing it independently)
+    // guarantees stop()/clear() never run concurrently with a start() still in flight —
+    // the race that caused "Cannot clear while scan is ongoing" and a stray AbortError on
+    // the underlying <video> element under React's dev-mode double-invoked effects.
+    const startPromise = scanner
       .start(
         { facingMode: "environment" },
-        { fps: 10, qrbox: 250 },
+        {
+          fps: 10,
+          qrbox: (viewfinderWidth, viewfinderHeight) => {
+            // Scale the scan target to the actual camera viewfinder instead of a fixed
+            // pixel size, so it fits properly regardless of the device's camera resolution.
+            const size = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.7);
+            return { width: size, height: size };
+          },
+        },
         (decodedText) => {
           if (cancelled) return;
           onScanRef.current(decodedText);
         },
         undefined,
       )
-      .then(() => {
-        if (cancelled) {
-          // Unmounted while start() was still resolving — stop immediately instead of
-          // leaving the camera running.
-          scanner.stop().catch(() => undefined).finally(() => scanner.clear());
-          return;
-        }
-        isRunning = true;
-      })
       .catch(() => {
         // Camera unavailable/denied — the manual token entry fallback still works.
       });
 
     return () => {
       cancelled = true;
-      // Html5Qrcode.stop() throws synchronously (not a rejected promise) if the scanner
-      // never reached the running state, so only call it once start() has confirmed.
-      if (isRunning) {
-        scanner
-          .stop()
-          .catch(() => undefined)
-          .finally(() => scanner.clear());
-      }
+      void startPromise.finally(() => stopAndClear(scanner));
     };
   }, [active, elementId]);
 

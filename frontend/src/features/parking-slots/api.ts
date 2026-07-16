@@ -15,14 +15,14 @@ export const parkingSlotsApi = {
 
   /**
    * The search endpoint filters to a single status per call (defaulting to AVAILABLE),
-   * so the full lot layout (needed to render occupied/reserved slots too) is assembled
+   * so the full floor layout (needed to render occupied/reserved slots too) is assembled
    * client-side from one call per status.
    */
-  findAllForLot: async (lotId: string): Promise<ParkingSlot[]> => {
+  findAllForFloor: async (lotId: string, floorId: string): Promise<ParkingSlot[]> => {
     const results = await Promise.all(
       ALL_STATUSES.map((status) =>
         apiClient.get<ParkingSlot[]>("/parking-slots", {
-          params: { lotId, status },
+          params: { lotId, floorId, status },
         }),
       ),
     );

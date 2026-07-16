@@ -7,6 +7,11 @@ export class FindSlotsDto {
   @IsUUID()
   lotId!: string;
 
+  @ApiPropertyOptional({ description: 'Restrict the search to a single floor' })
+  @IsOptional()
+  @IsUUID()
+  floorId?: string;
+
   @ApiPropertyOptional({
     enum: SlotStatus,
     default: SlotStatus.AVAILABLE,

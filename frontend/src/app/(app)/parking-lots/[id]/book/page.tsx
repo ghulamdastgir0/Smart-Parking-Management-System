@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Check, Download } from "lucide-react";
 import Link from "next/link";
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
@@ -18,11 +18,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
-import { useParkingLot } from "@/features/parking-lots/hooks";
+import { useFloors, useParkingLot } from "@/features/parking-lots/hooks";
 import { SlotGrid } from "@/features/parking-slots/components/slot-grid";
-import { useLotSlots } from "@/features/parking-slots/hooks";
+import { useFloorSlots } from "@/features/parking-slots/hooks";
 import type { ParkingSlot } from "@/features/parking-slots/types";
 import { useCreateReservation } from "@/features/reservations/hooks";
 import { estimateCost } from "@/lib/billing";
@@ -81,7 +82,23 @@ export default function BookingPage({
 }) {
   const { id: lotId } = use(params);
   const { data: lot } = useParkingLot(lotId);
-  const { data: slots, isLoading: slotsLoading, isError, error, refetch } = useLotSlots(lotId);
+  const { data: floors, isLoading: floorsLoading } = useFloors(lotId);
+  // Always a defined string so Tabs stays controlled from the first render.
+  const [selectedFloorId, setSelectedFloorId] = useState("");
+
+  useEffect(() => {
+    if (floors && floors.length > 0 && !selectedFloorId) {
+      setSelectedFloorId(floors[0].id);
+    }
+  }, [floors, selectedFloorId]);
+
+  const {
+    data: slots,
+    isLoading: slotsLoading,
+    isError,
+    error,
+    refetch,
+  } = useFloorSlots(lotId, selectedFloorId);
   const createReservation = useCreateReservation();
 
   const [step, setStep] = useState(0);
@@ -153,7 +170,9 @@ export default function BookingPage({
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Slot</span>
-              <span>{selectedSlot?.slotNumber}</span>
+              <span>
+                {selectedSlot?.slotNumber} · {selectedSlot?.floor.name}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Total</span>
@@ -195,6 +214,26 @@ export default function BookingPage({
       {step === 0 && (
         <Card>
           <CardContent className="space-y-4">
+            {floorsLoading ? (
+              <Skeleton className="h-8 w-full rounded-lg" />
+            ) : floors && floors.length > 1 ? (
+              <Tabs
+                value={selectedFloorId}
+                onValueChange={(v) => {
+                  if (!v) return;
+                  setSelectedFloorId(v);
+                  setSelectedSlot(null);
+                }}
+              >
+                <TabsList className="flex-wrap">
+                  {floors.map((floor) => (
+                    <TabsTrigger key={floor.id} value={floor.id}>
+                      {floor.name}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+            ) : null}
             {slotsLoading ? (
               <Skeleton className="h-64 w-full rounded-lg" />
             ) : isError ? (
@@ -210,7 +249,8 @@ export default function BookingPage({
               {selectedSlot ? (
                 <div className="text-sm">
                   Slot <span className="font-medium">{selectedSlot.slotNumber}</span> ·{" "}
-                  {selectedSlot.type} · {formatCurrency(selectedSlot.basePrice)}/hr
+                  {selectedSlot.floor.name} · {selectedSlot.type} ·{" "}
+                  {formatCurrency(selectedSlot.basePrice)}/hr
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">Select an available slot to continue</p>
@@ -289,7 +329,9 @@ export default function BookingPage({
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Slot</span>
-                  <span>{selectedSlot?.slotNumber}</span>
+                  <span>
+                    {selectedSlot?.slotNumber} · {selectedSlot?.floor.name}
+                  </span>
                 </div>
                 {expectedCheckout && (
                   <div className="flex justify-between">
@@ -322,7 +364,9 @@ export default function BookingPage({
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Slot</span>
-                <span>{selectedSlot?.slotNumber}</span>
+                <span>
+                  {selectedSlot?.slotNumber} · {selectedSlot?.floor.name}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Arrival</span>

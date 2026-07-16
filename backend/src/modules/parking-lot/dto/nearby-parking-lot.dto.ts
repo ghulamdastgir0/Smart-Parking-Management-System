@@ -36,6 +36,9 @@ export class NearbyParkingLotDto {
   })
   etaMinutes!: number | null;
 
+  @ApiProperty({ description: 'Sum of rows × columns across every floor in this lot' })
+  totalSlots!: number;
+
   @ApiProperty({ description: 'Count of currently AVAILABLE slots in this lot' })
   availableSlots!: number;
 

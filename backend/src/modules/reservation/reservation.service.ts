@@ -33,6 +33,9 @@ const RESERVATION_DETAIL_INCLUDE = {
   payment: true,
   qrCodes: true,
   challans: true,
+  lot: true,
+  slot: { include: { floor: true } },
+  user: { select: { id: true, email: true, firstName: true, lastName: true } },
 } satisfies Prisma.ReservationInclude;
 
 export type ReservationWithDetails = Prisma.ReservationGetPayload<{
@@ -195,6 +198,34 @@ export class ReservationService {
     return reservation;
   }
 
+  /**
+   * Staff-only: every reservation at a specific lot (not just the requesting staff
+   * member's own bookings). Admins may query any lot; managers only lots they manage.
+   */
+  async findByLot(
+    lotId: string,
+    requestingUser: AuthenticatedUser,
+  ): Promise<ReservationWithDetails[]> {
+    const lot = await this.prisma.parkingLot.findUnique({
+      where: { id: lotId },
+    });
+    if (!lot) {
+      throw new NotFoundException(`Parking lot ${lotId} not found`);
+    }
+    if (
+      requestingUser.role === Role.MANAGER &&
+      lot.managerId !== requestingUser.userId
+    ) {
+      throw new ForbiddenException('You do not manage this parking lot');
+    }
+
+    return this.prisma.reservation.findMany({
+      where: { lotId },
+      orderBy: { createdAt: 'desc' },
+      include: RESERVATION_DETAIL_INCLUDE,
+    });
+  }
+
   async confirmCheckoutPayment(
     reservationId: string,
     userId: string,
@@ -325,6 +356,87 @@ export class ReservationService {
       // the vehicle hasn't left, so staff just retries the dummy payment (mirrors how a
       // real gateway failure would be handled: retry, don't unwind the checkout).
       return payment;
+    });
+  }
+
+  async cancel(
+    reservationId: string,
+    requestingUser: AuthenticatedUser,
+  ): Promise<ReservationWithDetails> {
+    return this.prisma.$transaction(async (tx) => {
+      // Row-lock so this can't race the no-show monitoring cron cancelling the same
+      // reservation at the same moment.
+      const locked = await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM "Reservation" WHERE id = ${reservationId} FOR UPDATE
+      `;
+      if (locked.length === 0) {
+        throw new NotFoundException(`Reservation ${reservationId} not found`);
+      }
+
+      const reservation = await tx.reservation.findUniqueOrThrow({
+        where: { id: reservationId },
+      });
+
+      const isStaff =
+        requestingUser.role === Role.ADMIN ||
+        requestingUser.role === Role.MANAGER;
+      if (!isStaff && reservation.userId !== requestingUser.userId) {
+        throw new ForbiddenException(
+          'You do not have access to this reservation',
+        );
+      }
+
+      if (reservation.status !== ReservationStatus.CONFIRMED) {
+        throw new ConflictException(
+          `Only a CONFIRMED reservation can be cancelled (current status: ${reservation.status})`,
+        );
+      }
+
+      await tx.reservation.update({
+        where: { id: reservationId },
+        data: { status: ReservationStatus.CANCELLED },
+      });
+
+      await tx.parkingSlot.updateMany({
+        where: { id: reservation.slotId, status: SlotStatus.RESERVED },
+        data: { status: SlotStatus.AVAILABLE },
+      });
+
+      await tx.qrCode.updateMany({
+        where: {
+          reservationId,
+          type: QrCodeType.CHECK_IN,
+          status: QrCodeStatus.ACTIVE,
+        },
+        data: { status: QrCodeStatus.EXPIRED },
+      });
+
+      await this.auditService.log(
+        {
+          entityType: 'Reservation',
+          entityId: reservationId,
+          action: 'RESERVATION_CANCELLED_BY_USER',
+          userId: requestingUser.userId,
+        },
+        tx,
+      );
+
+      await this.notificationService.notify(
+        {
+          recipientId: reservation.userId,
+          recipientRole: NotificationRecipientRole.USER,
+          type: 'RESERVATION_CANCELLED',
+          title: 'Reservation cancelled',
+          message: 'Your reservation was cancelled and the slot released.',
+          reservationId,
+        },
+        tx,
+      );
+
+      return tx.reservation.findUniqueOrThrow({
+        where: { id: reservationId },
+        include: RESERVATION_DETAIL_INCLUDE,
+      });
     });
   }
 

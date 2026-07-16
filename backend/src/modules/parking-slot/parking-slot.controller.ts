@@ -6,11 +6,13 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { ParkingSlot } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { FindSlotsDto } from './dto/find-slots.dto';
 import { ParkingSlotResponseDto } from './dto/parking-slot-response.dto';
-import { ParkingSlotService } from './parking-slot.service';
+import {
+  ParkingSlotService,
+  ParkingSlotWithFloor,
+} from './parking-slot.service';
 
 @ApiTags('Parking Slots')
 @ApiBearerAuth()
@@ -30,6 +32,11 @@ export class ParkingSlotController {
     description: 'Parking lot to search within',
   })
   @ApiQuery({
+    name: 'floorId',
+    required: false,
+    description: 'Restrict the search to a single floor',
+  })
+  @ApiQuery({
     name: 'status',
     required: false,
     description: 'Defaults to AVAILABLE',
@@ -39,7 +46,7 @@ export class ParkingSlotController {
     description: 'Matching parking slots',
     type: [ParkingSlotResponseDto],
   })
-  search(@Query() dto: FindSlotsDto): Promise<ParkingSlot[]> {
+  search(@Query() dto: FindSlotsDto): Promise<ParkingSlotWithFloor[]> {
     return this.parkingSlotService.search(dto);
   }
 
@@ -51,7 +58,7 @@ export class ParkingSlotController {
     type: ParkingSlotResponseDto,
   })
   @ApiResponse({ status: 404, description: 'Parking slot not found' })
-  findOne(@Param('id') id: string): Promise<ParkingSlot> {
+  findOne(@Param('id') id: string): Promise<ParkingSlotWithFloor> {
     return this.parkingSlotService.findOne(id);
   }
 }

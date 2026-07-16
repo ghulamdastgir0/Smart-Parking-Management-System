@@ -103,7 +103,7 @@ export default function ParkingLotsPage() {
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {paged.map((lot) => {
-              const total = lot.rows * lot.columns;
+              const total = lot.totalSlots;
               const pct = total > 0 ? Math.round((lot.availableSlots / total) * 100) : 0;
               return (
                 <Card key={lot.id} className="flex flex-col">

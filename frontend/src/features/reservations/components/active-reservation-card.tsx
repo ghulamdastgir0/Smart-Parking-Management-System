@@ -6,13 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { QrCode } from "@/components/shared/qr-code";
 import { ReservationStatusBadge } from "@/components/shared/status-badge";
-import { useParkingLot } from "@/features/parking-lots/hooks";
 import { useCountdown } from "@/hooks/use-countdown";
 import { formatTime } from "@/lib/format";
 import type { Reservation } from "../types";
 
 export function ActiveReservationCard({ reservation }: { reservation: Reservation }) {
-  const { data: lot } = useParkingLot(reservation.lotId);
   const countdown = useCountdown(reservation.endTime);
   const activeQr = reservation.qrCodes.find((qr) => qr.status === "ACTIVE");
 
@@ -27,11 +25,12 @@ export function ActiveReservationCard({ reservation }: { reservation: Reservatio
             </span>
           </div>
           <div>
-            <p className="font-heading text-lg font-semibold">
-              {lot?.name ?? "Loading…"}
-            </p>
+            <p className="font-heading text-lg font-semibold">{reservation.lot.name}</p>
             <p className="flex items-center gap-1 text-sm text-muted-foreground">
-              <MapPin className="size-3.5" /> {lot?.address}
+              <MapPin className="size-3.5" /> {reservation.lot.address}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Slot {reservation.slot.slotNumber} · {reservation.slot.floor.name}
             </p>
           </div>
           <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">

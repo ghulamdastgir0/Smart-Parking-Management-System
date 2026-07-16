@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
+  ArrayMinSize,
   IsInt,
   IsLatitude,
   IsLongitude,
@@ -11,11 +13,53 @@ import {
   IsUUID,
   Max,
   Min,
+  ValidateNested,
 } from 'class-validator';
 
 export const MAX_ROWS = 200;
 export const MAX_COLUMNS = 500;
 export const MAX_TOTAL_SLOTS = 5000;
+
+export class CreateFloorInputDto {
+  @ApiProperty({ example: 'Ground Floor' })
+  @IsString()
+  @IsNotEmpty()
+  name!: string;
+
+  @ApiProperty({
+    example: 0,
+    description: 'Display/sort order; unique within the lot.',
+  })
+  @IsInt()
+  floorNumber!: number;
+
+  @ApiProperty({
+    example: 10,
+    description: `Number of row bands (A, B, C, ...) on this floor. Max ${MAX_ROWS}.`,
+  })
+  @IsInt()
+  @Min(1)
+  @Max(MAX_ROWS)
+  rows!: number;
+
+  @ApiProperty({
+    example: 100,
+    description: `Slots per row (1..columns) on this floor. Max ${MAX_COLUMNS}.`,
+  })
+  @IsInt()
+  @Min(1)
+  @Max(MAX_COLUMNS)
+  columns!: number;
+
+  @ApiProperty({
+    example: 2.5,
+    description:
+      'Base price stamped onto every auto-generated slot on this floor.',
+  })
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
+  defaultSlotPrice!: number;
+}
 
 export class CreateParkingLotDto {
   @ApiProperty({ example: 'Downtown Bus Station Parking' })
@@ -45,28 +89,13 @@ export class CreateParkingLotDto {
   managerId?: string;
 
   @ApiProperty({
-    example: 10,
-    description: `Number of row bands (A, B, C, ...). Max ${MAX_ROWS}.`,
+    type: [CreateFloorInputDto],
+    description:
+      'One or more floors to create for this lot, each with its own capacity. ' +
+      'Different floors commonly have different rows/columns, so capacity is per-floor, not per-lot.',
   })
-  @IsInt()
-  @Min(1)
-  @Max(MAX_ROWS)
-  rows!: number;
-
-  @ApiProperty({
-    example: 100,
-    description: `Slots per row (1..columns). Max ${MAX_COLUMNS}.`,
-  })
-  @IsInt()
-  @Min(1)
-  @Max(MAX_COLUMNS)
-  columns!: number;
-
-  @ApiProperty({
-    example: 2.5,
-    description: 'Base price applied to every auto-generated slot in this lot.',
-  })
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @IsPositive()
-  defaultSlotPrice!: number;
+  @ValidateNested({ each: true })
+  @Type(() => CreateFloorInputDto)
+  @ArrayMinSize(1)
+  floors!: CreateFloorInputDto[];
 }
