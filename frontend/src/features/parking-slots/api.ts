@@ -30,4 +30,23 @@ export const parkingSlotsApi = {
       .flatMap((res) => res.data)
       .sort((a, b) => a.slotNumber.localeCompare(b.slotNumber, undefined, { numeric: true }));
   },
+
+  /**
+   * Every slot on the floor (any status), each annotated with availableForWindow for the
+   * given arrival/duration — the real per-window availability, not just the slot's current
+   * (denormalized) status.
+   */
+  findAllForFloorInWindow: (
+    lotId: string,
+    floorId: string,
+    arrivalTime: string,
+    durationMinutes: number,
+  ): Promise<ParkingSlot[]> =>
+    apiClient
+      .get<ParkingSlot[]>("/parking-slots", {
+        params: { lotId, floorId, arrivalTime, durationMinutes },
+      })
+      .then((res) => res.data.sort((a, b) =>
+        a.slotNumber.localeCompare(b.slotNumber, undefined, { numeric: true }),
+      )),
 };

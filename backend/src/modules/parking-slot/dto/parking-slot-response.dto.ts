@@ -36,4 +36,13 @@ export class ParkingSlotResponseDto {
 
   @ApiProperty()
   basePrice!: string;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Whether this slot is actually free for the requested arrivalTime/durationMinutes ' +
+      "window. Only present when both were given in the search request — otherwise the " +
+      'plain status field is the only signal.',
+  })
+  availableForWindow?: boolean;
 }

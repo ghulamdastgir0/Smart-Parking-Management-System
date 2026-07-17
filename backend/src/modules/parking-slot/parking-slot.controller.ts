@@ -10,6 +10,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { FindSlotsDto } from './dto/find-slots.dto';
 import { ParkingSlotResponseDto } from './dto/parking-slot-response.dto';
 import {
+  ParkingSlotSearchResult,
   ParkingSlotService,
   ParkingSlotWithFloor,
 } from './parking-slot.service';
@@ -39,14 +40,24 @@ export class ParkingSlotController {
   @ApiQuery({
     name: 'status',
     required: false,
-    description: 'Defaults to AVAILABLE',
+    description: 'Defaults to AVAILABLE (ignored when arrivalTime/durationMinutes are given)',
+  })
+  @ApiQuery({
+    name: 'arrivalTime',
+    required: false,
+    description: 'Desired arrival time (ISO 8601) — pair with durationMinutes',
+  })
+  @ApiQuery({
+    name: 'durationMinutes',
+    required: false,
+    description: 'Desired parking duration in minutes — pair with arrivalTime',
   })
   @ApiResponse({
     status: 200,
     description: 'Matching parking slots',
     type: [ParkingSlotResponseDto],
   })
-  search(@Query() dto: FindSlotsDto): Promise<ParkingSlotWithFloor[]> {
+  search(@Query() dto: FindSlotsDto): Promise<ParkingSlotSearchResult[]> {
     return this.parkingSlotService.search(dto);
   }
 

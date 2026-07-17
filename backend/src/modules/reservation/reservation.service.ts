@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -28,6 +29,8 @@ import { CreateReservationDto } from './dto/create-reservation.dto';
 
 export const DEFAULT_CHECKIN_GRACE_MINUTES = 60;
 export const DEFAULT_CHECKOUT_BUFFER_MINUTES = 30;
+// 2 = today and tomorrow only.
+export const DEFAULT_MAX_ADVANCE_DAYS = 2;
 
 const RESERVATION_DETAIL_INCLUDE = {
   payment: true,
@@ -60,6 +63,24 @@ export class ReservationService {
     qrCodeImage: string;
   }> {
     const arrivalTime = new Date(dto.arrivalTime);
+    const now = new Date();
+    if (arrivalTime.getTime() < now.getTime()) {
+      throw new BadRequestException('Arrival time cannot be in the past');
+    }
+
+    const maxAdvanceDays = this.getMaxAdvanceDays();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const latestAllowedArrival = new Date(
+      startOfToday.getTime() + maxAdvanceDays * 24 * 60 * 60 * 1000,
+    );
+    if (arrivalTime.getTime() >= latestAllowedArrival.getTime()) {
+      throw new BadRequestException(
+        maxAdvanceDays <= 1
+          ? 'Reservations can only be made for today'
+          : `Reservations can only be made for today or the next ${maxAdvanceDays - 1} day(s)`,
+      );
+    }
+
     const expectedCheckout = new Date(
       arrivalTime.getTime() + dto.durationMinutes * 60_000,
     );
@@ -468,6 +489,13 @@ export class ReservationService {
     return this.configService.get<number>(
       'CHECKOUT_GRACE_BUFFER_MINUTES',
       DEFAULT_CHECKOUT_BUFFER_MINUTES,
+    );
+  }
+
+  private getMaxAdvanceDays(): number {
+    return this.configService.get<number>(
+      'RESERVATION_MAX_ADVANCE_DAYS',
+      DEFAULT_MAX_ADVANCE_DAYS,
     );
   }
 }

@@ -15,10 +15,14 @@ export interface ParkingSlot {
   type: SlotType;
   status: SlotStatus;
   basePrice: string;
+  /** Only present when the search included arrivalTime/durationMinutes. */
+  availableForWindow?: boolean;
 }
 
 export interface FindSlotsParams {
   lotId: string;
   floorId?: string;
   status?: SlotStatus;
+  arrivalTime?: string;
+  durationMinutes?: number;
 }

@@ -23,6 +23,15 @@ const STATUS_STYLE: Record<string, string> = {
   MAINTENANCE: "bg-destructive/10 text-destructive border-destructive/30",
 };
 
+// When availableForWindow is present (a specific arrival/duration was searched), it — not
+// the slot's current (denormalized) status — decides whether the slot is bookable: a slot
+// can show RESERVED right now but still be free for a later, non-overlapping window.
+function displayStatus(slot: ParkingSlot): string {
+  if (slot.availableForWindow === undefined) return slot.status;
+  if (slot.status === "MAINTENANCE") return "MAINTENANCE";
+  return slot.availableForWindow ? "AVAILABLE" : "RESERVED";
+}
+
 export function SlotGrid({
   slots,
   selectedSlotId,
@@ -47,19 +56,20 @@ export function SlotGrid({
                 {row}
               </span>
               {rowSlots.map((slot) => {
-                const interactive = onSelectSlot && slot.status === "AVAILABLE";
+                const status = displayStatus(slot);
+                const interactive = onSelectSlot && status === "AVAILABLE";
                 return (
                   <button
                     key={slot.id}
                     type="button"
                     disabled={!interactive}
                     onClick={() => interactive && onSelectSlot(slot)}
-                    title={`${slot.slotNumber} — ${slot.status}`}
+                    title={`${slot.slotNumber} — ${status}`}
                     className={cn(
                       "flex size-8 shrink-0 items-center justify-center rounded-md border text-[10px] font-medium transition-colors",
-                      STATUS_STYLE[slot.status],
+                      STATUS_STYLE[status],
                       interactive && "cursor-pointer",
-                      !interactive && slot.status !== "AVAILABLE" && "cursor-not-allowed",
+                      !interactive && status !== "AVAILABLE" && "cursor-not-allowed",
                       selectedSlotId === slot.id && "ring-2 ring-primary ring-offset-1 ring-offset-background",
                     )}
                   >

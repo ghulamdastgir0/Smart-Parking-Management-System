@@ -11,6 +11,20 @@ export function useFloorSlots(lotId: string, floorId: string) {
   });
 }
 
+export function useFloorSlotsForWindow(
+  lotId: string,
+  floorId: string,
+  arrivalTime?: string,
+  durationMinutes?: number,
+) {
+  return useQuery({
+    queryKey: ["parking-slots", "floor", floorId, "window", arrivalTime, durationMinutes],
+    queryFn: () =>
+      parkingSlotsApi.findAllForFloorInWindow(lotId, floorId, arrivalTime!, durationMinutes!),
+    enabled: Boolean(lotId) && Boolean(floorId) && Boolean(arrivalTime) && Boolean(durationMinutes),
+  });
+}
+
 export function useParkingSlot(id: string) {
   return useQuery({
     queryKey: ["parking-slots", id],

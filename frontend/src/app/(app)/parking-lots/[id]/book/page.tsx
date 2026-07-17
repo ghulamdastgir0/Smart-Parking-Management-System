@@ -23,7 +23,7 @@ import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { useFloors, useParkingLot } from "@/features/parking-lots/hooks";
 import { SlotGrid } from "@/features/parking-slots/components/slot-grid";
-import { useFloorSlots } from "@/features/parking-slots/hooks";
+import { useFloorSlotsForWindow } from "@/features/parking-slots/hooks";
 import type { ParkingSlot } from "@/features/parking-slots/types";
 import { useCreateReservation } from "@/features/reservations/hooks";
 import { estimateCost } from "@/lib/billing";
@@ -33,6 +33,17 @@ import type { CreateReservationResponse } from "@/features/reservations/types";
 
 const DURATION_PRESETS = [30, 60, 120, 180, 240, 360, 480, 720, 1440, 2880, 4320, 10080];
 
+// Reservations can only be made for today or tomorrow — mirrors the backend's
+// RESERVATION_MAX_ADVANCE_DAYS check in reservation.service.ts (default 2).
+const MAX_ADVANCE_DAYS = 2;
+
+function dateInputValue(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 const detailsSchema = z.object({
   date: z.string().min(1, "Arrival date is required"),
   time: z.string().min(1, "Arrival time is required"),
@@ -41,7 +52,7 @@ const detailsSchema = z.object({
 
 type DetailsValues = z.infer<typeof detailsSchema>;
 
-const STEPS = ["Select Slot", "Details", "Confirm"];
+const STEPS = ["Details", "Select Slot", "Confirm"];
 
 function Stepper({ step }: { step: number }) {
   return (
@@ -92,13 +103,6 @@ export default function BookingPage({
     }
   }, [floors, selectedFloorId]);
 
-  const {
-    data: slots,
-    isLoading: slotsLoading,
-    isError,
-    error,
-    refetch,
-  } = useFloorSlots(lotId, selectedFloorId);
   const createReservation = useCreateReservation();
 
   const [step, setStep] = useState(0);
@@ -120,8 +124,34 @@ export default function BookingPage({
     : null;
   const isPastArrival = arrivalDate ? arrivalDate.getTime() < Date.now() : false;
 
+  const today = new Date();
+  const minDate = dateInputValue(today);
+  const maxDate = dateInputValue(
+    new Date(today.getTime() + (MAX_ADVANCE_DAYS - 1) * 24 * 60 * 60 * 1000),
+  );
+  const isDateOutOfRange = Boolean(values.date) && (values.date < minDate || values.date > maxDate);
+
+  const arrivalIso = arrivalDate && !isPastArrival && !isDateOutOfRange
+    ? arrivalDate.toISOString()
+    : undefined;
+
+  const {
+    data: slots,
+    isLoading: slotsLoading,
+    isError,
+    error,
+    refetch,
+  } = useFloorSlotsForWindow(lotId, selectedFloorId, arrivalIso, values.durationMinutes);
+
+  // The chosen slot only makes sense for the window it was picked under — if the operator
+  // goes back and changes the date/time/duration or floor, the old pick may no longer be
+  // available (or may not even exist on the new floor), so clear it.
+  useEffect(() => {
+    setSelectedSlot(null);
+  }, [selectedFloorId, arrivalIso, values.durationMinutes]);
+
   function onSubmitDetails() {
-    setStep(2);
+    setStep(1);
   }
 
   function onConfirm() {
@@ -212,6 +242,94 @@ export default function BookingPage({
       <Stepper step={step} />
 
       {step === 0 && (
+        <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+          <Card>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="date">Arrival date</Label>
+                  <Input
+                    id="date"
+                    type="date"
+                    min={minDate}
+                    max={maxDate}
+                    {...form.register("date")}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="time">Arrival time</Label>
+                  <Input id="time" type="time" {...form.register("time")} />
+                </div>
+              </div>
+              {isPastArrival && (
+                <p className="text-sm text-destructive">
+                  Arrival time cannot be in the past.
+                </p>
+              )}
+              {!isPastArrival && isDateOutOfRange && (
+                <p className="text-sm text-destructive">
+                  Reservations can only be made for today or tomorrow.
+                </p>
+              )}
+              <div className="space-y-1.5">
+                <Label>Expected duration</Label>
+                <Select
+                  value={String(values.durationMinutes)}
+                  onValueChange={(v) => form.setValue("durationMinutes", Number(v))}
+                  items={DURATION_PRESETS.map((mins) => ({
+                    value: String(mins),
+                    label: formatDuration(mins),
+                  }))}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DURATION_PRESETS.map((mins) => (
+                      <SelectItem key={mins} value={String(mins)}>
+                        {formatDuration(mins)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                A 30-minute grace buffer is added after your expected checkout, and you must
+                check in within the check-in grace window or the reservation will be
+                auto-cancelled.
+              </p>
+              <div className="flex justify-end border-t border-border pt-4">
+                <Button
+                  disabled={!values.date || !values.time || isPastArrival || isDateOutOfRange}
+                  onClick={onSubmitDetails}
+                >
+                  Continue
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="h-fit">
+            <CardContent className="space-y-3">
+              <h2 className="font-heading font-medium">Booking Summary</h2>
+              <div className="space-y-1.5 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Parking Lot</span>
+                  <span>{lot?.name}</span>
+                </div>
+                {expectedCheckout && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Checkout</span>
+                    <span>{expectedCheckout.toLocaleString()}</span>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {step === 1 && (
         <Card>
           <CardContent className="space-y-4">
             {floorsLoading ? (
@@ -222,7 +340,6 @@ export default function BookingPage({
                 onValueChange={(v) => {
                   if (!v) return;
                   setSelectedFloorId(v);
-                  setSelectedSlot(null);
                 }}
               >
                 <TabsList className="flex-wrap">
@@ -253,108 +370,21 @@ export default function BookingPage({
                   {formatCurrency(selectedSlot.basePrice)}/hr
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">Select an available slot to continue</p>
-              )}
-              <Button disabled={!selectedSlot} onClick={() => setStep(1)}>
-                Continue
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {step === 1 && (
-        <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-          <Card>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="date">Arrival date</Label>
-                  <Input id="date" type="date" {...form.register("date")} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="time">Arrival time</Label>
-                  <Input id="time" type="time" {...form.register("time")} />
-                </div>
-              </div>
-              {isPastArrival && (
-                <p className="text-sm text-destructive">
-                  Arrival time cannot be in the past.
+                <p className="text-sm text-muted-foreground">
+                  Select an available slot for your chosen time to continue
                 </p>
               )}
-              <div className="space-y-1.5">
-                <Label>Expected duration</Label>
-                <Select
-                  value={String(values.durationMinutes)}
-                  onValueChange={(v) => form.setValue("durationMinutes", Number(v))}
-                  items={DURATION_PRESETS.map((mins) => ({
-                    value: String(mins),
-                    label: formatDuration(mins),
-                  }))}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DURATION_PRESETS.map((mins) => (
-                      <SelectItem key={mins} value={String(mins)}>
-                        {formatDuration(mins)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                A 30-minute grace buffer is added after your expected checkout, and you must
-                check in within the check-in grace window or the reservation will be
-                auto-cancelled.
-              </p>
-              <div className="flex justify-between border-t border-border pt-4">
+              <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setStep(0)}>
                   Back
                 </Button>
-                <Button
-                  disabled={!values.date || !values.time || isPastArrival}
-                  onClick={onSubmitDetails}
-                >
+                <Button disabled={!selectedSlot} onClick={() => setStep(2)}>
                   Continue
                 </Button>
               </div>
-            </CardContent>
-          </Card>
-
-          <Card className="h-fit">
-            <CardContent className="space-y-3">
-              <h2 className="font-heading font-medium">Booking Summary</h2>
-              <div className="space-y-1.5 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Parking Lot</span>
-                  <span>{lot?.name}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Slot</span>
-                  <span>
-                    {selectedSlot?.slotNumber} · {selectedSlot?.floor.name}
-                  </span>
-                </div>
-                {expectedCheckout && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Checkout</span>
-                    <span>{expectedCheckout.toLocaleString()}</span>
-                  </div>
-                )}
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Hourly Rate</span>
-                  <span>{formatCurrency(hourlyRate)}</span>
-                </div>
-              </div>
-              <div className="flex justify-between border-t border-border pt-3 text-base font-semibold">
-                <span>Estimated Total</span>
-                <span>{formatCurrency(estimatedTotal)}</span>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {step === 2 && (

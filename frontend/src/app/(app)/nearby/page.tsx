@@ -6,13 +6,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
@@ -27,17 +22,28 @@ const NearbyMap = dynamic(
   { ssr: false, loading: () => <Skeleton className="h-full w-full rounded-xl" /> },
 );
 
-const RADIUS_OPTIONS = [10, 20, 30, 40, 50, 60, 70];
+const MIN_RADIUS_KM = 1;
+const MAX_RADIUS_KM = 70;
+const DEFAULT_RADIUS_KM = 10;
 
 export default function NearbyPage() {
   const geo = useGeolocation();
   const [selectedLotId, setSelectedLotId] = useState<string | null>(null);
-  const [radiusKm, setRadiusKm] = useState(10);
+  const [radiusInput, setRadiusInput] = useState(String(DEFAULT_RADIUS_KM));
+  const [radiusKm, setRadiusKm] = useState(DEFAULT_RADIUS_KM);
 
   useEffect(() => {
     geo.locate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Debounce so every keystroke while typing a radius doesn't fire its own search request.
+  useEffect(() => {
+    const parsed = Number(radiusInput);
+    if (!Number.isFinite(parsed) || parsed < MIN_RADIUS_KM || parsed > MAX_RADIUS_KM) return;
+    const handle = setTimeout(() => setRadiusKm(parsed), 400);
+    return () => clearTimeout(handle);
+  }, [radiusInput]);
 
   const params =
     geo.status === "success" && geo.latitude !== null && geo.longitude !== null
@@ -52,22 +58,30 @@ export default function NearbyPage() {
         title="Nearby Parking"
         description="Find and book parking close to you"
         actions={
-          <Select
-            value={String(radiusKm)}
-            onValueChange={(v) => v && setRadiusKm(Number(v))}
-            items={RADIUS_OPTIONS.map((km) => ({ value: String(km), label: `Within ${km} km` }))}
-          >
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {RADIUS_OPTIONS.map((km) => (
-                <SelectItem key={km} value={String(km)}>
-                  Within {km} km
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <Label htmlFor="radius" className="text-sm text-muted-foreground">
+              Within
+            </Label>
+            <Input
+              id="radius"
+              type="number"
+              inputMode="numeric"
+              min={MIN_RADIUS_KM}
+              max={MAX_RADIUS_KM}
+              value={radiusInput}
+              onChange={(e) => setRadiusInput(e.target.value)}
+              onBlur={() => {
+                const parsed = Math.round(Number(radiusInput));
+                const clamped = Number.isFinite(parsed)
+                  ? Math.min(MAX_RADIUS_KM, Math.max(MIN_RADIUS_KM, parsed))
+                  : DEFAULT_RADIUS_KM;
+                setRadiusInput(String(clamped));
+                setRadiusKm(clamped);
+              }}
+              className="w-16"
+            />
+            <span className="text-sm text-muted-foreground">km</span>
+          </div>
         }
       />
 
