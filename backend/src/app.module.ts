@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AuditModule } from './common/audit/audit.module';
 import { NotificationModule } from './common/notification/notification.module';
+import { RealtimeModule } from './common/realtime/realtime.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CheckpointModule } from './modules/checkpoint/checkpoint.module';
 import { NotificationHttpModule } from './modules/notification/notification.module';
@@ -19,6 +20,7 @@ import { PrismaModule } from './prisma/prisma.module';
     PrismaModule,
     AuditModule,
     NotificationModule,
+    RealtimeModule,
     AuthModule,
     UsersModule,
     ParkingLotModule,

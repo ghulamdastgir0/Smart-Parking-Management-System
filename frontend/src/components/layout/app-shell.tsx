@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useAuth } from "@/features/auth/auth-provider";
+import { useRealtimeSync } from "@/hooks/use-realtime-sync";
 import { BottomNav } from "./bottom-nav";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
@@ -12,6 +13,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, isLoading, isAuthenticated } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  useRealtimeSync();
 
   // Customers must have a payment method on file before using the rest of the app — checkout
   // charges it automatically, so there's nothing to bill without one.

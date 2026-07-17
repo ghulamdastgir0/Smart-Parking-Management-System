@@ -19,6 +19,7 @@ import {
 } from '@prisma/client';
 import { AuditService } from '../../common/audit/audit.service';
 import { NotificationService } from '../../common/notification/notification.service';
+import { RealtimeGateway } from '../../common/realtime/realtime.gateway';
 import { toQrCodeImage } from '../../common/qr/qr.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BillingService } from '../reservation/billing.service';
@@ -42,6 +43,7 @@ export class CheckpointService {
     private readonly auditService: AuditService,
     private readonly notificationService: NotificationService,
     private readonly billingService: BillingService,
+    private readonly realtimeGateway: RealtimeGateway,
   ) {}
 
   async checkIn(
@@ -52,7 +54,7 @@ export class CheckpointService {
     checkoutQrToken: string;
     checkoutQrCodeImage: string;
   }> {
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const qrCode = await this.loadValidQrCode(tx, token, QrCodeType.CHECK_IN);
       const { reservation } = qrCode;
 
@@ -112,6 +114,15 @@ export class CheckpointService {
         checkoutQrCodeImage,
       };
     });
+
+    // Emitted after the transaction commits, not from inside it — the customer's client
+    // would otherwise be able to react and re-fetch over REST before the write is visible.
+    this.realtimeGateway.emitToUser(result.reservation.userId, 'reservation:updated', {
+      reservationId: result.reservation.id,
+      event: 'check-in',
+    });
+
+    return result;
   }
 
   /**
@@ -134,7 +145,7 @@ export class CheckpointService {
     paymentFailed: boolean;
     message: string;
   }> {
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const qrCode = await this.loadValidQrCode(
         tx,
         token,
@@ -313,6 +324,13 @@ export class CheckpointService {
         message: 'Checkout complete.',
       };
     });
+
+    this.realtimeGateway.emitToUser(result.reservation.userId, 'reservation:updated', {
+      reservationId: result.reservation.id,
+      event: result.paymentFailed ? 'checkout-payment-declined' : 'check-out',
+    });
+
+    return result;
   }
 
   private async loadValidQrCode(
