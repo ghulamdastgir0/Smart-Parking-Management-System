@@ -22,6 +22,9 @@ export function useMyReservations() {
     queryKey: reservationsKeys.mine(user?.id),
     queryFn: reservationsApi.findMine,
     enabled: Boolean(user),
+    // So a checkpoint scan (check-in/check-out, done from a staff device) shows up here
+    // without the customer having to manually reload — mirrors useReservation's polling.
+    refetchInterval: 15_000,
   });
 }
 

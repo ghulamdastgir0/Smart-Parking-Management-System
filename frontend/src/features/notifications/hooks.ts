@@ -12,7 +12,9 @@ export function useMyNotifications() {
     // now-logged-in user's cache slot — it writes to the old (unsubscribed) key instead.
     queryKey: ["notifications", "mine", user?.id],
     queryFn: notificationsApi.findMine,
-    refetchInterval: 30_000,
+    // Matches useMyReservations' polling so a checkpoint scan's notification (and the
+    // reservation status change it caused) show up together, not staggered.
+    refetchInterval: 15_000,
     enabled: Boolean(user),
   });
 }
