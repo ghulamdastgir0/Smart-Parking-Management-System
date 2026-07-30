@@ -2,10 +2,26 @@ import { z } from "zod";
 
 const EXPIRY_PATTERN = /^(0[1-9]|1[0-2])\/\d{2}$/;
 
+function luhnCheck(digits: string): boolean {
+  let sum = 0;
+  let shouldDouble = false;
+  for (let i = digits.length - 1; i >= 0; i--) {
+    let digit = Number(digits[i]);
+    if (shouldDouble) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+    sum += digit;
+    shouldDouble = !shouldDouble;
+  }
+  return sum % 10 === 0;
+}
+
 export const cardNumberField = z
   .string()
   .min(1, "Card number is required")
-  .refine((v) => /^\d{4} \d{4} \d{4} \d{4}$/.test(v), "Enter a valid 16-digit card number");
+  .refine((v) => /^\d{4} \d{4} \d{4} \d{4}$/.test(v), "Enter a valid 16-digit card number")
+  .refine((v) => luhnCheck(v.replace(/\s+/g, "")), "Card number is not valid");
 
 export const expiryField = z
   .string()

@@ -1,7 +1,19 @@
 "use client";
 
 import { Html5Qrcode } from "html5-qrcode";
-import { useEffect, useId, useRef } from "react";
+import { CameraOff } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
+
+function cameraErrorMessage(err: unknown): string {
+  const name = err instanceof Error ? err.name : undefined;
+  if (name === "NotAllowedError") {
+    return "Camera access was denied. Enable camera permission, or use manual entry below.";
+  }
+  if (name === "NotFoundError") {
+    return "No camera was found on this device. Use manual entry below.";
+  }
+  return "Camera unavailable. Use manual entry below.";
+}
 
 async function stopAndClear(scanner: Html5Qrcode) {
   try {
@@ -27,6 +39,7 @@ export function QrScanner({
 }) {
   const elementId = useId().replace(/:/g, "");
   const onScanRef = useRef(onScan);
+  const [cameraError, setCameraError] = useState<string | null>(null);
   // Serializes every start()/stop() call on this container. React's dev-mode
   // double-invoked effects (mount -> cleanup -> mount, run back-to-back without
   // awaiting the async cleanup) would otherwise let a second Html5Qrcode instance
@@ -47,6 +60,7 @@ export function QrScanner({
 
     queueRef.current = queueRef.current.then(async () => {
       if (cancelled) return;
+      setCameraError(null);
       scanner = new Html5Qrcode(elementId);
       const activeScanner = scanner;
       try {
@@ -78,8 +92,9 @@ export function QrScanner({
             videoEl.style.transform = isFrontFacing ? "scaleX(-1)" : "";
           }
         }
-      } catch {
+      } catch (err) {
         // Camera unavailable/denied — the manual token entry fallback still works.
+        if (!cancelled) setCameraError(cameraErrorMessage(err));
       }
     });
 
@@ -91,7 +106,14 @@ export function QrScanner({
 
   return (
     <div className="mx-auto aspect-square w-full max-w-sm overflow-hidden rounded-2xl bg-black">
-      <div id={elementId} className="h-full w-full" />
+      {cameraError ? (
+        <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-6 text-center">
+          <CameraOff className="size-8 text-white/60" />
+          <p className="text-sm text-white/80">{cameraError}</p>
+        </div>
+      ) : (
+        <div id={elementId} className="h-full w-full" />
+      )}
     </div>
   );
 }

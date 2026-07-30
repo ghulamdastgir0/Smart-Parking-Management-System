@@ -28,13 +28,15 @@ import { useAuth } from "@/features/auth/auth-provider";
 import { BillingForm } from "@/features/users/components/billing-form";
 import { useChangePassword, usePaymentMethod } from "@/features/users/hooks";
 import { getApiStatus } from "@/lib/api-error";
+import { setServerFieldError, useConfirmFieldSync } from "@/lib/form-errors";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/format";
+import { newPasswordField } from "@/lib/validators";
 
 const changePasswordSchema = z
   .object({
     currentPassword: z.string().min(1, "Current password is required"),
-    newPassword: z.string().min(8, "Password must be at least 8 characters"),
+    newPassword: newPasswordField,
     confirmPassword: z.string().min(1, "Please confirm your new password"),
   })
   .refine((data) => data.newPassword === data.confirmPassword, {
@@ -68,13 +70,18 @@ export default function ProfilePage() {
   const passwordForm = useForm<ChangePasswordValues>({
     resolver: zodResolver(changePasswordSchema),
     defaultValues: { currentPassword: "", newPassword: "", confirmPassword: "" },
+    mode: "onBlur",
   });
+  useConfirmFieldSync(passwordForm, "newPassword", "confirmPassword");
   const newPassword = passwordForm.watch("newPassword");
 
   function onChangePassword(values: ChangePasswordValues) {
     changePassword.mutate(
       { currentPassword: values.currentPassword, newPassword: values.newPassword },
-      { onSuccess: () => passwordForm.reset() },
+      {
+        onSuccess: () => passwordForm.reset(),
+        onError: (error) => setServerFieldError(passwordForm, error, "currentPassword"),
+      },
     );
   }
 

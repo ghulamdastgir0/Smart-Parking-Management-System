@@ -32,12 +32,9 @@ export function useRegister() {
 
   return useMutation({
     mutationFn: (payload: RegisterPayload) => authApi.register(payload),
-    onSuccess: (data) => {
-      applySession(data);
-      // A brand-new account never has a payment method yet — go straight to setup instead
-      // of bouncing through /dashboard first.
-      window.location.href = "/complete-profile";
-    },
+    // No navigation here — the register page itself advances to its payment step and only
+    // then hard-navigates to /dashboard once a card is on file, so the caller controls timing.
+    onSuccess: (data) => applySession(data),
     onError: (error) => {
       toast.error(getApiErrorMessage(error));
     },

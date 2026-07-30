@@ -16,9 +16,11 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useLogin } from "@/features/auth/hooks";
+import { setServerFieldError } from "@/lib/form-errors";
+import { emailField } from "@/lib/validators";
 
 const loginSchema = z.object({
-  email: z.string().min(1, "Email is required").email("Enter a valid email"),
+  email: emailField,
   password: z.string().min(1, "Password is required"),
 });
 
@@ -29,10 +31,13 @@ export default function LoginPage() {
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: "", password: "" },
+    mode: "onBlur",
   });
 
   function onSubmit(values: LoginValues) {
-    login.mutate(values);
+    login.mutate(values, {
+      onError: (error) => setServerFieldError(form, error, "password"),
+    });
   }
 
   return (

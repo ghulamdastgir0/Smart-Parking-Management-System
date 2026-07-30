@@ -35,6 +35,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // /complete-profile is still onboarding, not real dashboard usage — every other route
+  // bounces straight back here via needsBilling, so showing the full nav/sidebar/bottom-nav
+  // around it would just be dead chrome pointing at pages the user can't actually reach yet.
+  if (pathname === "/complete-profile") {
+    return <div className="flex min-h-svh items-center justify-center p-4">{children}</div>;
+  }
+
   return (
     <div className="flex min-h-svh">
       <Sidebar />

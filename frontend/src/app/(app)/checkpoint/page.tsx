@@ -12,6 +12,10 @@ import { useCheckIn, useCheckOut } from "@/features/checkpoint/hooks";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { formatCurrency } from "@/lib/format";
 
+// Reservation tokens are QrCode.token @default(uuid()) in the schema — a manually-typed
+// value that isn't a UUID can never match a real reservation.
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 type Mode = "check-in" | "check-out";
 type Result =
   | {
@@ -36,7 +40,9 @@ type Result =
 export default function CheckpointPage() {
   const [mode, setMode] = useState<Mode>("check-in");
   const [manualToken, setManualToken] = useState("");
+  const [manualTokenTouched, setManualTokenTouched] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
+  const manualTokenValid = UUID_PATTERN.test(manualToken.trim());
   const checkIn = useCheckIn();
   const checkOut = useCheckOut();
 
@@ -93,6 +99,7 @@ export default function CheckpointPage() {
   function reset() {
     setResult(null);
     setManualToken("");
+    setManualTokenTouched(false);
   }
 
   return (
@@ -121,22 +128,28 @@ export default function CheckpointPage() {
             className="flex gap-2"
             onSubmit={(e) => {
               e.preventDefault();
-              if (manualToken) handleScan(manualToken);
+              if (manualToken && manualTokenValid) handleScan(manualToken.trim());
             }}
           >
             <Input
               value={manualToken}
               onChange={(e) => setManualToken(e.target.value)}
+              onBlur={() => setManualTokenTouched(true)}
               placeholder="Reservation token"
               autoFocus
             />
             <Button
               type="submit"
-              disabled={!manualToken || checkIn.isPending || checkOut.isPending}
+              disabled={!manualToken || !manualTokenValid || checkIn.isPending || checkOut.isPending}
             >
               Submit
             </Button>
           </form>
+          {manualTokenTouched && manualToken && !manualTokenValid && (
+            <p className="text-xs text-destructive">
+              That doesn&apos;t look like a valid reservation token.
+            </p>
+          )}
         </div>
       </div>
 

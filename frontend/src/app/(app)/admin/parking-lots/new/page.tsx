@@ -31,6 +31,7 @@ import { Switch } from "@/components/ui/switch";
 import { PageHeader } from "@/components/shared/page-header";
 import { useAuth } from "@/features/auth/auth-provider";
 import { useCreateParkingLot } from "@/features/parking-lots/hooks";
+import { floorSchema } from "@/features/parking-lots/schemas";
 import { MAX_COLUMNS, MAX_ROWS, MAX_TOTAL_SLOTS } from "@/features/parking-lots/types";
 import { useAdminUsers } from "@/features/users/hooks";
 import { reverseGeocode } from "@/lib/geocode";
@@ -40,24 +41,28 @@ const LocationPickerMap = dynamic(
   { ssr: false, loading: () => <Skeleton className="h-full w-full rounded-xl" /> },
 );
 
-const floorSchema = z.object({
-  name: z.string().min(1, "Floor name is required"),
-  floorNumber: z.number().int(),
-  rows: z.number().int().min(1).max(MAX_ROWS),
-  columns: z.number().int().min(1).max(MAX_COLUMNS),
-  defaultSlotPrice: z.number().positive("Must be greater than 0"),
-});
-
-const schema = z.object({
-  name: z.string().min(1, "Name is required"),
-  address: z.string().min(1, "Address is required"),
-  managerId: z.string(),
-  sameCapacityForAll: z.boolean(),
-  sharedRows: z.number().int().min(1).max(MAX_ROWS),
-  sharedColumns: z.number().int().min(1).max(MAX_COLUMNS),
-  sharedPrice: z.number().positive(),
-  floors: z.array(floorSchema).min(1, "At least one floor is required"),
-});
+const schema = z
+  .object({
+    name: z.string().trim().min(1, "Name is required").max(150, "Name must be 150 characters or fewer"),
+    address: z
+      .string()
+      .trim()
+      .min(1, "Address is required")
+      .max(255, "Address must be 255 characters or fewer"),
+    managerId: z.string(),
+    sameCapacityForAll: z.boolean(),
+    sharedRows: z.number().int().min(1).max(MAX_ROWS),
+    sharedColumns: z.number().int().min(1).max(MAX_COLUMNS),
+    sharedPrice: z.number().positive(),
+    floors: z.array(floorSchema).min(1, "At least one floor is required"),
+  })
+  .refine(
+    (data) => data.floors.reduce((sum, f) => sum + f.rows * f.columns, 0) <= MAX_TOTAL_SLOTS,
+    {
+      message: `Total slots across all floors cannot exceed ${MAX_TOTAL_SLOTS}`,
+      path: ["floors"],
+    },
+  );
 
 type FormValues = z.infer<typeof schema>;
 
@@ -82,6 +87,7 @@ export default function NewParkingLotPage() {
       sharedPrice: 5,
       floors: [{ name: "Ground Floor", floorNumber: 0, rows: 5, columns: 10, defaultSlotPrice: 5 }],
     },
+    mode: "onBlur",
   });
 
   useEffect(() => {
@@ -419,10 +425,23 @@ export default function NewParkingLotPage() {
                 ))}
               </div>
 
-              <p className={exceedsMax ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>
-                Total Slots: {totalSlots}
-                {exceedsMax && ` — exceeds the maximum of ${MAX_TOTAL_SLOTS}`}
-              </p>
+              <FormField
+                control={form.control}
+                name="floors"
+                render={() => (
+                  <FormItem>
+                    <p
+                      className={
+                        exceedsMax ? "text-sm text-destructive" : "text-sm text-muted-foreground"
+                      }
+                    >
+                      Total Slots: {totalSlots}
+                      {exceedsMax && ` — exceeds the maximum of ${MAX_TOTAL_SLOTS}`}
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <p className="text-xs text-muted-foreground">
                 Floor layout cannot be changed after creation — add more floors later from the
                 lot&apos;s edit page if needed.

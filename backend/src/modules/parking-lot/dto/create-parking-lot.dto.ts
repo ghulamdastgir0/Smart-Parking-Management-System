@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   ArrayMinSize,
   IsInt,
   IsLatitude,
@@ -12,6 +13,7 @@ import {
   IsString,
   IsUUID,
   Max,
+  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -21,9 +23,10 @@ export const MAX_COLUMNS = 500;
 export const MAX_TOTAL_SLOTS = 5000;
 
 export class CreateFloorInputDto {
-  @ApiProperty({ example: 'Ground Floor' })
+  @ApiProperty({ example: 'Ground Floor', maxLength: 50 })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(50)
   name!: string;
 
   @ApiProperty({
@@ -31,6 +34,8 @@ export class CreateFloorInputDto {
     description: 'Display/sort order; unique within the lot.',
   })
   @IsInt()
+  @Min(0)
+  @Max(999)
   floorNumber!: number;
 
   @ApiProperty({
@@ -62,14 +67,16 @@ export class CreateFloorInputDto {
 }
 
 export class CreateParkingLotDto {
-  @ApiProperty({ example: 'Downtown Bus Station Parking' })
+  @ApiProperty({ example: 'Downtown Bus Station Parking', maxLength: 150 })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(150)
   name!: string;
 
-  @ApiProperty({ example: '123 Main St, Springfield' })
+  @ApiProperty({ example: '123 Main St, Springfield', maxLength: 255 })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(255)
   address!: string;
 
   @ApiProperty({ example: 37.7749 })
@@ -97,5 +104,6 @@ export class CreateParkingLotDto {
   @ValidateNested({ each: true })
   @Type(() => CreateFloorInputDto)
   @ArrayMinSize(1)
+  @ArrayMaxSize(50)
   floors!: CreateFloorInputDto[];
 }

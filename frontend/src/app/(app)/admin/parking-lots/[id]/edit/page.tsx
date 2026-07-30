@@ -36,19 +36,9 @@ import {
   useParkingLot,
   useUpdateParkingLot,
 } from "@/features/parking-lots/hooks";
-import { MAX_COLUMNS, MAX_ROWS } from "@/features/parking-lots/types";
+import { floorSchema, type FloorFormValues } from "@/features/parking-lots/schemas";
 import { useAdminUsers } from "@/features/users/hooks";
 import { reverseGeocode } from "@/lib/geocode";
-
-const floorSchema = z.object({
-  name: z.string().min(1, "Floor name is required"),
-  floorNumber: z.number().int(),
-  rows: z.number().int().min(1).max(MAX_ROWS),
-  columns: z.number().int().min(1).max(MAX_COLUMNS),
-  defaultSlotPrice: z.number().positive("Must be greater than 0"),
-});
-
-type FloorFormValues = z.infer<typeof floorSchema>;
 
 function AddFloorForm({ lotId, nextFloorNumber }: { lotId: string; nextFloorNumber: number }) {
   const createFloor = useCreateFloor(lotId);
@@ -61,6 +51,7 @@ function AddFloorForm({ lotId, nextFloorNumber }: { lotId: string; nextFloorNumb
       columns: 10,
       defaultSlotPrice: 5,
     },
+    mode: "onBlur",
   });
 
   function onSubmit(values: FloorFormValues) {
@@ -170,8 +161,12 @@ const LocationPickerMap = dynamic(
 );
 
 const schema = z.object({
-  name: z.string().min(1, "Name is required"),
-  address: z.string().min(1, "Address is required"),
+  name: z.string().trim().min(1, "Name is required").max(150, "Name must be 150 characters or fewer"),
+  address: z
+    .string()
+    .trim()
+    .min(1, "Address is required")
+    .max(255, "Address must be 255 characters or fewer"),
   managerId: z.string(),
 });
 
@@ -196,6 +191,7 @@ export default function EditParkingLotPage({
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { name: "", address: "", managerId: "" },
+    mode: "onBlur",
   });
 
   useEffect(() => {

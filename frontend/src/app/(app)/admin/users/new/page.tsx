@@ -25,13 +25,14 @@ import {
 } from "@/components/ui/select";
 import { PageHeader } from "@/components/shared/page-header";
 import { useCreateUser } from "@/features/users/hooks";
+import { emailField, nameField, newPasswordField } from "@/lib/validators";
 import { Role } from "@/types/enums";
 
 const schema = z.object({
-  firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().min(1, "Last name is required"),
-  email: z.string().min(1, "Email is required").email("Enter a valid email"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  firstName: nameField("First name"),
+  lastName: nameField("Last name"),
+  email: emailField,
+  password: newPasswordField,
   role: z.enum([Role.ADMIN, Role.MANAGER, Role.CUSTOMER]),
 });
 
@@ -50,6 +51,7 @@ export default function NewUserPage() {
       password: "",
       role: Role.CUSTOMER,
     },
+    mode: "onBlur",
   });
 
   const password = form.watch("password");
@@ -73,7 +75,7 @@ export default function NewUserPage() {
                     <FormItem>
                       <FormLabel>First name</FormLabel>
                       <FormControl>
-                        <Input autoComplete="given-name" {...field} />
+                        <Input autoComplete="given-name" maxLength={20} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -86,7 +88,7 @@ export default function NewUserPage() {
                     <FormItem>
                       <FormLabel>Last name</FormLabel>
                       <FormControl>
-                        <Input autoComplete="family-name" {...field} />
+                        <Input autoComplete="family-name" maxLength={20} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

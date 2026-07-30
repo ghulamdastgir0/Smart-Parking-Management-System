@@ -4,14 +4,6 @@ import { Ticket } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -29,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
@@ -62,31 +55,21 @@ function CancelButton({ reservation }: { reservation: Reservation }) {
       <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setOpen(true)}>
         Cancel
       </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Cancel this reservation?</DialogTitle>
-            <DialogDescription>
-              Slot {reservation.slot.slotNumber} will be released and the customer notified.
-              This cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              Keep Reservation
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={cancelReservation.isPending}
-              onClick={() =>
-                cancelReservation.mutate(undefined, { onSuccess: () => setOpen(false) })
-              }
-            >
-              Cancel Reservation
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={open}
+        onOpenChange={setOpen}
+        title="Cancel this reservation?"
+        description={
+          <>
+            Slot {reservation.slot.slotNumber} will be released and the customer notified. This
+            cannot be undone.
+          </>
+        }
+        cancelLabel="Keep Reservation"
+        confirmLabel="Cancel Reservation"
+        isPending={cancelReservation.isPending}
+        onConfirm={() => cancelReservation.mutate(undefined, { onSuccess: () => setOpen(false) })}
+      />
     </>
   );
 }

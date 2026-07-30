@@ -8,6 +8,14 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -44,11 +52,31 @@ function dateInputValue(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-const detailsSchema = z.object({
-  date: z.string().min(1, "Arrival date is required"),
-  time: z.string().min(1, "Arrival time is required"),
-  durationMinutes: z.number().min(15).max(10080),
-});
+const detailsSchema = z
+  .object({
+    date: z.string().min(1, "Arrival date is required"),
+    time: z.string().min(1, "Arrival time is required"),
+    durationMinutes: z.number().min(15).max(10080),
+  })
+  .refine(
+    (data) => {
+      if (!data.date || !data.time) return true; // let the required checks above handle empties
+      return new Date(`${data.date}T${data.time}`).getTime() >= Date.now();
+    },
+    { message: "Arrival time cannot be in the past.", path: ["time"] },
+  )
+  .refine(
+    (data) => {
+      if (!data.date) return true;
+      const today = new Date();
+      const minDate = dateInputValue(today);
+      const maxDate = dateInputValue(
+        new Date(today.getTime() + (MAX_ADVANCE_DAYS - 1) * 24 * 60 * 60 * 1000),
+      );
+      return data.date >= minDate && data.date <= maxDate;
+    },
+    { message: "Reservations can only be made for today or tomorrow.", path: ["date"] },
+  );
 
 type DetailsValues = z.infer<typeof detailsSchema>;
 
@@ -112,6 +140,7 @@ export default function BookingPage({
   const form = useForm<DetailsValues>({
     resolver: zodResolver(detailsSchema),
     defaultValues: { date: "", time: "", durationMinutes: 60 },
+    mode: "onBlur",
   });
 
   const values = form.watch();
@@ -244,68 +273,69 @@ export default function BookingPage({
       {step === 0 && (
         <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
           <Card>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="date">Arrival date</Label>
-                  <Input
-                    id="date"
-                    type="date"
-                    min={minDate}
-                    max={maxDate}
-                    {...form.register("date")}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="time">Arrival time</Label>
-                  <Input id="time" type="time" {...form.register("time")} />
-                </div>
-              </div>
-              {isPastArrival && (
-                <p className="text-sm text-destructive">
-                  Arrival time cannot be in the past.
-                </p>
-              )}
-              {!isPastArrival && isDateOutOfRange && (
-                <p className="text-sm text-destructive">
-                  Reservations can only be made for today or tomorrow.
-                </p>
-              )}
-              <div className="space-y-1.5">
-                <Label>Expected duration</Label>
-                <Select
-                  value={String(values.durationMinutes)}
-                  onValueChange={(v) => form.setValue("durationMinutes", Number(v))}
-                  items={DURATION_PRESETS.map((mins) => ({
-                    value: String(mins),
-                    label: formatDuration(mins),
-                  }))}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DURATION_PRESETS.map((mins) => (
-                      <SelectItem key={mins} value={String(mins)}>
-                        {formatDuration(mins)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                A 30-minute grace buffer is added after your expected checkout, and you must
-                check in within the check-in grace window or the reservation will be
-                auto-cancelled.
-              </p>
-              <div className="flex justify-end border-t border-border pt-4">
-                <Button
-                  disabled={!values.date || !values.time || isPastArrival || isDateOutOfRange}
-                  onClick={onSubmitDetails}
-                >
-                  Continue
-                </Button>
-              </div>
+            <CardContent>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmitDetails)} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="date"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Arrival date</FormLabel>
+                          <FormControl>
+                            <Input type="date" min={minDate} max={maxDate} {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="time"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Arrival time</FormLabel>
+                          <FormControl>
+                            <Input type="time" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Expected duration</Label>
+                    <Select
+                      value={String(values.durationMinutes)}
+                      onValueChange={(v) => form.setValue("durationMinutes", Number(v))}
+                      items={DURATION_PRESETS.map((mins) => ({
+                        value: String(mins),
+                        label: formatDuration(mins),
+                      }))}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {DURATION_PRESETS.map((mins) => (
+                          <SelectItem key={mins} value={String(mins)}>
+                            {formatDuration(mins)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    A 30-minute grace buffer is added after your expected checkout, and you must
+                    check in within the check-in grace window or the reservation will be
+                    auto-cancelled.
+                  </p>
+                  <div className="flex justify-end border-t border-border pt-4">
+                    <Button type="submit">Continue</Button>
+                  </div>
+                </form>
+              </Form>
             </CardContent>
           </Card>
 

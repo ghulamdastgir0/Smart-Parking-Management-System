@@ -1,10 +1,20 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsNotEmpty, IsString, Matches, Max, Min } from 'class-validator';
+import {
+  IsInt,
+  IsNotEmpty,
+  IsString,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
+import { IsLuhnValid } from '../../../common/validators/luhn.validator';
 
 export class SavePaymentMethodDto {
   @ApiProperty({ example: 'Jane Doe' })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(100)
   cardholderName!: string;
 
   @ApiProperty({
@@ -14,6 +24,7 @@ export class SavePaymentMethodDto {
   })
   @IsString()
   @Matches(/^\d{13,19}$/, { message: 'Card number must be 13-19 digits' })
+  @IsLuhnValid()
   cardNumber!: string;
 
   @ApiProperty({ example: 12, minimum: 1, maximum: 12 })
@@ -25,5 +36,6 @@ export class SavePaymentMethodDto {
   @ApiProperty({ example: 2030 })
   @IsInt()
   @Min(new Date().getFullYear())
+  @Max(new Date().getFullYear() + 20)
   expiryYear!: number;
 }

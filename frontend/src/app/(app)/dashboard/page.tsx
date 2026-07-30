@@ -22,7 +22,13 @@ const ACTIVE_STATUSES = new Set(["CONFIRMED", "CHECKED_IN", "OVERTIME", "PENDING
 function CustomerDashboard() {
   const { user } = useAuth();
   const { data: reservations, isLoading, isError, error, refetch } = useMyReservations();
-  const { data: notifications } = useMyNotifications();
+  const {
+    data: notifications,
+    isLoading: notificationsLoading,
+    isError: notificationsError,
+    error: notificationsErrorObj,
+    refetch: refetchNotifications,
+  } = useMyNotifications();
 
   if (isLoading) {
     return (
@@ -133,7 +139,14 @@ function CustomerDashboard() {
                 View all
               </Button>
             </div>
-            {!notifications || notifications.length === 0 ? (
+            {notificationsLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-10 w-full rounded-lg" />
+                <Skeleton className="h-10 w-full rounded-lg" />
+              </div>
+            ) : notificationsError ? (
+              <ErrorState error={notificationsErrorObj} onRetry={refetchNotifications} />
+            ) : !notifications || notifications.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
                 No notifications yet
               </p>

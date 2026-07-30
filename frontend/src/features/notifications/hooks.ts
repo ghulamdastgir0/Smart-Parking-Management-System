@@ -1,7 +1,9 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useAuth } from "@/features/auth/auth-provider";
+import { getApiErrorMessage } from "@/lib/api-error";
 import { notificationsApi } from "./api";
 import type { Notification } from "./types";
 
@@ -31,5 +33,6 @@ export function useMarkNotificationsRead() {
         notifications?.map((n) => (n.isRead ? n : { ...n, isRead: true })),
       );
     },
+    onError: (error) => toast.error(getApiErrorMessage(error)),
   });
 }

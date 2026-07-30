@@ -5,14 +5,6 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -23,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
@@ -140,32 +133,23 @@ export default function AdminParkingLotsPage() {
         </div>
       )}
 
-      <Dialog open={Boolean(toDelete)} onOpenChange={(open) => !open && setToDelete(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Parking Lot?</DialogTitle>
-            <DialogDescription>
-              This will permanently remove &quot;{toDelete?.name}&quot; and all its slots. This
-              cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setToDelete(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={deleteLot.isPending}
-              onClick={() => {
-                if (!toDelete) return;
-                deleteLot.mutate(toDelete.id, { onSuccess: () => setToDelete(null) });
-              }}
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={Boolean(toDelete)}
+        onOpenChange={(open) => !open && setToDelete(null)}
+        title="Delete Parking Lot?"
+        description={
+          <>
+            This will permanently remove &quot;{toDelete?.name}&quot; and all its slots. This
+            cannot be undone.
+          </>
+        }
+        confirmLabel="Delete"
+        isPending={deleteLot.isPending}
+        onConfirm={() => {
+          if (!toDelete) return;
+          deleteLot.mutate(toDelete.id, { onSuccess: () => setToDelete(null) });
+        }}
+      />
     </div>
   );
 }

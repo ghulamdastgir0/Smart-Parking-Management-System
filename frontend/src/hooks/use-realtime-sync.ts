@@ -3,8 +3,11 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { io } from "socket.io-client";
+import { toast } from "sonner";
 import { useAuth } from "@/features/auth/auth-provider";
 import { getAuthToken } from "@/lib/auth-token";
+
+const REALTIME_TOAST_ID = "realtime-status";
 
 /**
  * Pushes reservation/notification updates the instant a checkpoint scan happens on a
@@ -26,9 +29,32 @@ export function useRealtimeSync() {
       auth: { token },
     });
 
+    // Tracks whether we've already shown a "disconnected" toast, so the eventual
+    // reconnection only announces "restored" when there was actually something to restore —
+    // not on the very first, normal connection.
+    const wasDisconnected = { current: false };
+
     socket.on("reservation:updated", () => {
       queryClient.invalidateQueries({ queryKey: ["reservations"] });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    });
+
+    socket.on("connect", () => {
+      if (wasDisconnected.current) {
+        toast.success("Live updates restored", { id: REALTIME_TOAST_ID });
+        wasDisconnected.current = false;
+      }
+    });
+
+    socket.on("connect_error", () => {
+      wasDisconnected.current = true;
+      toast.error("Live updates unavailable — retrying…", { id: REALTIME_TOAST_ID });
+    });
+
+    socket.on("disconnect", (reason) => {
+      if (reason === "io client disconnect") return; // deliberate teardown, not a drop
+      wasDisconnected.current = true;
+      toast.warning("Live updates disconnected — retrying…", { id: REALTIME_TOAST_ID });
     });
 
     return () => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CreditCard } from "lucide-react";
+import { CreditCard, Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,11 @@ import {
 } from "@/lib/card-form";
 
 const billingSchema = z.object({
-  cardholderName: z.string().min(1, "Cardholder name is required"),
+  cardholderName: z
+    .string()
+    .trim()
+    .min(1, "Cardholder name is required")
+    .max(100, "Cardholder name must be 100 characters or fewer"),
   cardNumber: cardNumberField,
   expiry: expiryField,
   cvv: cvvField,
@@ -51,6 +55,7 @@ export function BillingForm({
       expiry: "",
       cvv: "",
     },
+    mode: "onBlur",
   });
 
   function onSubmit(values: BillingValues) {
@@ -158,7 +163,11 @@ export function BillingForm({
           declined payment, for testing.
         </p>
         <Button type="submit" className="w-full" disabled={savePaymentMethod.isPending}>
-          <CreditCard className="size-4" />
+          {savePaymentMethod.isPending ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <CreditCard className="size-4" />
+          )}
           {savePaymentMethod.isPending ? "Saving…" : submitLabel}
         </Button>
       </form>
