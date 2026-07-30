@@ -6,15 +6,22 @@ export interface AdminUser {
   firstName: string;
   lastName: string;
   role: Role;
+  isBlocked: boolean;
   createdAt: string;
 }
 
-export interface CreateUserPayload {
-  email: string;
-  password: string;
+export interface UpdateProfilePayload {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+}
+
+export interface CreateStaffPayload {
   firstName: string;
   lastName: string;
-  role: Role;
+  email: string;
+  password: string;
+  role: "MANAGER" | "ADMIN";
 }
 
 export interface ChangePasswordPayload {

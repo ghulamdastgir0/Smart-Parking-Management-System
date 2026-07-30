@@ -24,6 +24,7 @@ import { MapsService } from './maps.service';
 import { rowLabel } from './row-label.util';
 
 const DEFAULT_RADIUS_KM = 10;
+const DUPLICATE_LOT_RADIUS_KM = 0.05; // ~50m
 
 interface NearbyLotRow {
   id: string;
@@ -60,6 +61,7 @@ export class ParkingLotService {
   ): Promise<ParkingLot> {
     this.assertUniqueFloorNumbers(dto.floors);
     const totalSlots = this.assertWithinSlotLimit(dto.floors);
+    await this.assertNoDuplicateLot(dto.name, dto.latitude, dto.longitude);
 
     const verification = await this.locationService.verifyAddress(dto.address);
     if (!verification.verified) {
@@ -199,7 +201,10 @@ export class ParkingLotService {
 
     const availableByFloor = await this.prisma.parkingSlot.groupBy({
       by: ['floorId'],
-      where: { floorId: { in: floors.map((f) => f.id) }, status: SlotStatus.AVAILABLE },
+      where: {
+        floorId: { in: floors.map((f) => f.id) },
+        status: SlotStatus.AVAILABLE,
+      },
       _count: { _all: true },
     });
     const availabilityMap = new Map(
@@ -211,6 +216,43 @@ export class ParkingLotService {
       totalSlots: floor.rows * floor.columns,
       availableSlots: availabilityMap.get(floor.id) ?? 0,
     }));
+  }
+
+  /**
+   * Rejects an exact (case-insensitive) name match, or coordinates within
+   * DUPLICATE_LOT_RADIUS_KM of an existing lot — catches both a copy-pasted name and a
+   * near-identical map pin, without false-positiving on legitimately nearby-but-different lots.
+   */
+  private async assertNoDuplicateLot(
+    name: string,
+    latitude: number,
+    longitude: number,
+  ): Promise<void> {
+    const nameMatch = await this.prisma.parkingLot.findFirst({
+      where: { name: { equals: name, mode: 'insensitive' } },
+    });
+    if (nameMatch) {
+      throw new ConflictException(
+        `A parking lot named "${name}" already exists`,
+      );
+    }
+
+    const nearby = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM "ParkingLot"
+      WHERE (6371 * acos(
+        LEAST(1.0, GREATEST(-1.0,
+          cos(radians(${latitude}::float)) * cos(radians(latitude)) *
+            cos(radians(longitude) - radians(${longitude}::float)) +
+          sin(radians(${latitude}::float)) * sin(radians(latitude))
+        ))
+      )) <= ${DUPLICATE_LOT_RADIUS_KM}::float
+      LIMIT 1
+    `;
+    if (nearby.length > 0) {
+      throw new ConflictException(
+        'Another parking lot already exists within 50m of this location',
+      );
+    }
   }
 
   private assertUniqueFloorNumbers(floors: CreateFloorInputDto[]): void {
@@ -269,7 +311,9 @@ export class ParkingLotService {
    */
   private async getAvailabilityMap(
     lotIds: string[],
-  ): Promise<Map<string, { availableSlots: number; minHourlyRate: string | null }>> {
+  ): Promise<
+    Map<string, { availableSlots: number; minHourlyRate: string | null }>
+  > {
     if (lotIds.length === 0) {
       return new Map();
     }
@@ -292,7 +336,9 @@ export class ParkingLotService {
     );
   }
 
-  private async getTotalSlotsMap(lotIds: string[]): Promise<Map<string, number>> {
+  private async getTotalSlotsMap(
+    lotIds: string[],
+  ): Promise<Map<string, number>> {
     if (lotIds.length === 0) {
       return new Map();
     }
@@ -314,7 +360,10 @@ export class ParkingLotService {
 
   private mergeEnrichment(
     lot: ParkingLot,
-    availability: Map<string, { availableSlots: number; minHourlyRate: string | null }>,
+    availability: Map<
+      string,
+      { availableSlots: number; minHourlyRate: string | null }
+    >,
     totalSlots: Map<string, number>,
   ): ParkingLotWithAvailability {
     const entry = availability.get(lot.id);
@@ -326,19 +375,31 @@ export class ParkingLotService {
     };
   }
 
-  async findAll(): Promise<ParkingLotWithAvailability[]> {
-    const lots = await this.prisma.parkingLot.findMany();
+  async findAll(
+    requestingUser?: AuthenticatedUser,
+  ): Promise<ParkingLotWithAvailability[]> {
+    const lots = await this.prisma.parkingLot.findMany({
+      where:
+        requestingUser?.role === Role.CUSTOMER ? { isActive: true } : undefined,
+    });
     const lotIds = lots.map((l) => l.id);
     const [availability, totalSlots] = await Promise.all([
       this.getAvailabilityMap(lotIds),
       this.getTotalSlotsMap(lotIds),
     ]);
-    return lots.map((lot) => this.mergeEnrichment(lot, availability, totalSlots));
+    return lots.map((lot) =>
+      this.mergeEnrichment(lot, availability, totalSlots),
+    );
   }
 
-  async findOne(id: string): Promise<ParkingLotWithAvailability> {
+  async findOne(
+    id: string,
+    requestingUser?: AuthenticatedUser,
+  ): Promise<ParkingLotWithAvailability> {
     const lot = await this.prisma.parkingLot.findUnique({ where: { id } });
-    if (!lot) {
+    // A customer gets the same 404 for "doesn't exist" and "exists but is deactivated" —
+    // an inactive lot must be fully unreachable to customers, not just hidden from lists.
+    if (!lot || (requestingUser?.role === Role.CUSTOMER && !lot.isActive)) {
       throw new NotFoundException(`Parking lot ${id} not found`);
     }
     const [availability, totalSlots] = await Promise.all([
@@ -413,6 +474,7 @@ export class ParkingLotService {
             ))
           )) AS "distanceKm"
         FROM "ParkingLot"
+        WHERE "isActive" = true
       )
       SELECT *
       FROM distances

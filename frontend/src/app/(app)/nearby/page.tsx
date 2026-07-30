@@ -4,6 +4,7 @@ import { LocateFixed, MapPin, TriangleAlert } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,6 +76,9 @@ export default function NearbyPage() {
                 const clamped = Number.isFinite(parsed)
                   ? Math.min(MAX_RADIUS_KM, Math.max(MIN_RADIUS_KM, parsed))
                   : DEFAULT_RADIUS_KM;
+                if (Number.isFinite(parsed) && parsed > MAX_RADIUS_KM) {
+                  toast.warning(`Max limit is ${MAX_RADIUS_KM}km`);
+                }
                 setRadiusInput(String(clamped));
                 setRadiusKm(clamped);
               }}

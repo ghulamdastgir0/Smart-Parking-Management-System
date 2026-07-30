@@ -1,8 +1,11 @@
 "use client";
 
-import { Building2, Search } from "lucide-react";
+import { Building2, Plus, Search } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -13,15 +16,24 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
+import { useAuth } from "@/features/auth/auth-provider";
 import { useParkingLots } from "@/features/parking-lots/hooks";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { formatCurrency } from "@/lib/format";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
+  adminParkingLotsSearchChanged,
   parkingLotsPageChanged,
   parkingLotsSearchChanged,
   parkingLotsSortChanged,
@@ -37,6 +49,16 @@ const SORT_OPTIONS: { value: ParkingLotsSortKey; label: string }[] = [
 ];
 
 export default function ParkingLotsPage() {
+  const { user } = useAuth();
+  const isStaff = user?.role === "ADMIN" || user?.role === "MANAGER";
+  return isStaff ? <StaffParkingLotsView /> : <CustomerParkingLotsView />;
+}
+
+// Browsing (search/sort/paginate a card grid) makes sense for a customer picking a lot to
+// book; a dense management table with edit/delete actions makes sense for staff — different
+// audiences need genuinely different layouts, so both live under this one route/nav entry
+// instead of a forced one-size-fits-all view.
+function CustomerParkingLotsView() {
   const { data: lots, isLoading, isError, error, refetch } = useParkingLots();
   const dispatch = useAppDispatch();
   const { search, sort, page } = useAppSelector((state) => state.filters.parkingLots);
@@ -188,6 +210,105 @@ export default function ParkingLotsPage() {
             </div>
           )}
         </>
+      )}
+    </div>
+  );
+}
+
+function StaffParkingLotsView() {
+  const { user } = useAuth();
+  const router = useRouter();
+  const { data: lots, isLoading, isError, error, refetch } = useParkingLots();
+  const dispatch = useAppDispatch();
+  const search = useAppSelector((state) => state.filters.adminParkingLots.search);
+
+  const visible = useMemo(() => {
+    if (!lots) return [];
+    const scoped = user?.role === "MANAGER" ? lots.filter((l) => l.managerId === user.id) : lots;
+    const query = search.trim().toLowerCase();
+    return query
+      ? scoped.filter(
+          (l) =>
+            l.name.toLowerCase().includes(query) || l.address.toLowerCase().includes(query),
+        )
+      : scoped;
+  }, [lots, search, user]);
+
+  return (
+    <div>
+      <PageHeader
+        title="Parking Lots"
+        description="Create, edit, and monitor your parking lots"
+        actions={
+          <Button render={<Link href="/admin/parking-lots/new" />} nativeButton={false}>
+            <Plus className="size-4" /> Add Parking Lot
+          </Button>
+        }
+      />
+
+      <div className="relative mb-4 max-w-xs">
+        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Search lots…"
+          className="pl-9"
+          value={search}
+          onChange={(e) => dispatch(adminParkingLotsSearchChanged(e.target.value))}
+        />
+      </div>
+
+      {isLoading ? (
+        <Skeleton className="h-64 w-full rounded-xl" />
+      ) : isError ? (
+        <ErrorState error={error} onRetry={refetch} />
+      ) : visible.length === 0 ? (
+        <EmptyState
+          icon={Building2}
+          title="No parking lots yet"
+          description="Create your first parking lot to get started."
+          action={{ label: "Add Parking Lot", render: <Link href="/admin/parking-lots/new" /> }}
+        />
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Address</TableHead>
+                <TableHead>Capacity</TableHead>
+                <TableHead>Available</TableHead>
+                <TableHead>Rate</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {visible.map((lot) => (
+                <TableRow
+                  key={lot.id}
+                  className="cursor-pointer"
+                  onClick={() => router.push(`/parking-lots/${lot.id}`)}
+                >
+                  <TableCell className="font-medium">
+                    <div className="flex items-center gap-1.5">
+                      {lot.name}
+                      {!lot.isActive && <Badge variant="destructive">Inactive</Badge>}
+                    </div>
+                  </TableCell>
+                  <TableCell className="max-w-xs truncate text-muted-foreground">
+                    {lot.address}
+                  </TableCell>
+                  <TableCell>{lot.totalSlots} slots</TableCell>
+                  <TableCell>
+                    <Badge variant={lot.availableSlots > 0 ? "success" : "destructive"}>
+                      {lot.availableSlots}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {lot.minHourlyRate ? formatCurrency(lot.minHourlyRate) : "—"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       )}
     </div>
   );

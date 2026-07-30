@@ -24,45 +24,38 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PageHeader } from "@/components/shared/page-header";
-import { useCreateUser } from "@/features/users/hooks";
+import { useCreateStaff } from "@/features/users/hooks";
 import { emailField, nameField, newPasswordField } from "@/lib/validators";
-import { Role } from "@/types/enums";
 
 const schema = z.object({
   firstName: nameField("First name"),
   lastName: nameField("Last name"),
   email: emailField,
   password: newPasswordField,
-  role: z.enum([Role.ADMIN, Role.MANAGER, Role.CUSTOMER]),
+  role: z.enum(["MANAGER", "ADMIN"]),
 });
 
 type FormValues = z.infer<typeof schema>;
 
-export default function NewUserPage() {
+export default function NewManagerPage() {
   const router = useRouter();
-  const createUser = useCreateUser();
+  const createStaff = useCreateStaff();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: {
-      firstName: "",
-      lastName: "",
-      email: "",
-      password: "",
-      role: Role.CUSTOMER,
-    },
+    defaultValues: { firstName: "", lastName: "", email: "", password: "", role: "MANAGER" },
     mode: "onBlur",
   });
 
   const password = form.watch("password");
 
   function onSubmit(values: FormValues) {
-    createUser.mutate(values, { onSuccess: () => router.push("/admin/users") });
+    createStaff.mutate(values, { onSuccess: () => router.push("/admin/managers") });
   }
 
   return (
     <div className="mx-auto max-w-lg">
-      <PageHeader title="Add User" description="Create an account with any role" />
+      <PageHeader title="Add Staff" description="Create a manager or admin account" />
       <Card>
         <CardContent>
           <Form {...form}>
@@ -132,9 +125,8 @@ export default function NewUserPage() {
                       value={field.value}
                       onValueChange={field.onChange}
                       items={[
-                        { value: Role.CUSTOMER, label: "Customer" },
-                        { value: Role.MANAGER, label: "Manager" },
-                        { value: Role.ADMIN, label: "Admin" },
+                        { value: "MANAGER", label: "Manager" },
+                        { value: "ADMIN", label: "Admin" },
                       ]}
                     >
                       <FormControl>
@@ -143,9 +135,8 @@ export default function NewUserPage() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value={Role.CUSTOMER}>Customer</SelectItem>
-                        <SelectItem value={Role.MANAGER}>Manager</SelectItem>
-                        <SelectItem value={Role.ADMIN}>Admin</SelectItem>
+                        <SelectItem value="MANAGER">Manager</SelectItem>
+                        <SelectItem value="ADMIN">Admin</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -156,8 +147,8 @@ export default function NewUserPage() {
                 <Button type="button" variant="outline" onClick={() => router.back()}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={createUser.isPending}>
-                  {createUser.isPending ? "Creating…" : "Create User"}
+                <Button type="submit" disabled={createStaff.isPending}>
+                  {createStaff.isPending ? "Creating…" : "Create Account"}
                 </Button>
               </div>
             </form>

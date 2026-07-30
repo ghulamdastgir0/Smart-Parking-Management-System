@@ -5,6 +5,7 @@ export interface ParkingLot {
   latitude: number;
   longitude: number;
   managerId: string;
+  isActive: boolean;
   createdAt: string;
   updatedAt: string;
   totalSlots: number;
@@ -66,6 +67,7 @@ export interface UpdateParkingLotPayload {
   latitude?: number;
   longitude?: number;
   managerId?: string;
+  isActive?: boolean;
 }
 
 export const MAX_ROWS = 200;

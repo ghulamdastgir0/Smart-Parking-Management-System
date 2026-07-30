@@ -1,8 +1,7 @@
 "use client";
 
-import { Plus, Trash2, Users } from "lucide-react";
-import Link from "next/link";
-import { useState } from "react";
+import { Ban, ShieldCheck, Users } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,33 +17,28 @@ import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
-import { useAuth } from "@/features/auth/auth-provider";
-import { useAdminUsers, useDeleteUser } from "@/features/users/hooks";
+import { useAdminUsers, useBlockUser, useUnblockUser } from "@/features/users/hooks";
 import type { AdminUser } from "@/features/users/types";
 import { formatDate } from "@/lib/format";
 
 export default function AdminUsersPage() {
-  const { user: currentUser } = useAuth();
   const { data: users, isLoading, isError, error, refetch } = useAdminUsers();
-  const deleteUser = useDeleteUser();
-  const [toDelete, setToDelete] = useState<AdminUser | null>(null);
+  const blockUser = useBlockUser();
+  const unblockUser = useUnblockUser();
+  const [toBlock, setToBlock] = useState<AdminUser | null>(null);
+
+  // Manager/Admin accounts have their own dedicated Staff page (create/edit/delete there) —
+  // this list is customer accounts only, view/block-only.
+  const customers = useMemo(() => users?.filter((u) => u.role === "CUSTOMER") ?? [], [users]);
 
   return (
     <div>
-      <PageHeader
-        title="Users"
-        description="All registered accounts"
-        actions={
-          <Button render={<Link href="/admin/users/new" />} nativeButton={false}>
-            <Plus className="size-4" /> Add User
-          </Button>
-        }
-      />
+      <PageHeader title="Users" description="All registered customer accounts" />
       {isLoading ? (
         <Skeleton className="h-64 w-full rounded-xl" />
       ) : isError ? (
         <ErrorState error={error} onRetry={refetch} />
-      ) : !users || users.length === 0 ? (
+      ) : customers.length === 0 ? (
         <EmptyState icon={Users} title="No users found" />
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border">
@@ -53,33 +47,47 @@ export default function AdminUsersPage() {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Email</TableHead>
-                <TableHead>Role</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead>Member Since</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.map((u) => (
+              {customers.map((u) => (
                 <TableRow key={u.id}>
                   <TableCell className="font-medium">
                     {u.firstName} {u.lastName}
                   </TableCell>
                   <TableCell className="text-muted-foreground">{u.email}</TableCell>
                   <TableCell>
-                    <Badge variant={u.role === "ADMIN" ? "default" : "secondary"}>
-                      {u.role}
-                    </Badge>
+                    {u.isBlocked ? (
+                      <Badge variant="destructive">Blocked</Badge>
+                    ) : (
+                      <Badge variant="success">Active</Badge>
+                    )}
                   </TableCell>
                   <TableCell>{formatDate(u.createdAt)}</TableCell>
                   <TableCell className="text-right">
-                    {u.id !== currentUser?.id && (
+                    {u.isBlocked ? (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="text-success"
+                        title="Unblock user"
+                        disabled={unblockUser.isPending}
+                        onClick={() => unblockUser.mutate(u.id)}
+                      >
+                        <ShieldCheck className="size-3.5" />
+                      </Button>
+                    ) : (
                       <Button
                         variant="ghost"
                         size="icon-sm"
                         className="text-destructive"
-                        onClick={() => setToDelete(u)}
+                        title="Block user"
+                        onClick={() => setToBlock(u)}
                       >
-                        <Trash2 className="size-3.5" />
+                        <Ban className="size-3.5" />
                       </Button>
                     )}
                   </TableCell>
@@ -91,20 +99,21 @@ export default function AdminUsersPage() {
       )}
 
       <ConfirmDialog
-        open={Boolean(toDelete)}
-        onOpenChange={(open) => !open && setToDelete(null)}
-        title="Delete User?"
+        open={Boolean(toBlock)}
+        onOpenChange={(open) => !open && setToBlock(null)}
+        title="Block User?"
         description={
           <>
-            This will permanently remove &quot;{toDelete?.firstName} {toDelete?.lastName}&quot;
-            ({toDelete?.email}). This cannot be undone.
+            &quot;{toBlock?.firstName} {toBlock?.lastName}&quot; ({toBlock?.email}) will no
+            longer be able to log in, and any of their confirmed reservations will be
+            cancelled and the slots freed. This can be undone by unblocking them later.
           </>
         }
-        confirmLabel="Delete"
-        isPending={deleteUser.isPending}
+        confirmLabel="Block"
+        isPending={blockUser.isPending}
         onConfirm={() => {
-          if (!toDelete) return;
-          deleteUser.mutate(toDelete.id, { onSuccess: () => setToDelete(null) });
+          if (!toBlock) return;
+          blockUser.mutate(toBlock.id, { onSuccess: () => setToBlock(null) });
         }}
       />
     </div>

@@ -1,6 +1,6 @@
 import { apiClient } from "@/lib/api-client";
 import { SlotStatus } from "@/types/enums";
-import type { FindSlotsParams, ParkingSlot } from "./types";
+import type { BulkUpdateSlotStatusPayload, FindSlotsParams, ParkingSlot } from "./types";
 
 const ALL_STATUSES = Object.values(SlotStatus);
 
@@ -49,4 +49,9 @@ export const parkingSlotsApi = {
       .then((res) => res.data.sort((a, b) =>
         a.slotNumber.localeCompare(b.slotNumber, undefined, { numeric: true }),
       )),
+
+  bulkUpdateStatus: (payload: BulkUpdateSlotStatusPayload) =>
+    apiClient
+      .patch<{ updatedCount: number }>("/parking-slots/bulk-status", payload)
+      .then((res) => res.data),
 };

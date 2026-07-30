@@ -1,10 +1,22 @@
 "use client";
 
-import { Building2, CalendarCheck2, MapPin, ScanLine, Settings2, Ticket, Wallet } from "lucide-react";
+import {
+  Building2,
+  CalendarCheck2,
+  ChevronRight,
+  MapPin,
+  ScanLine,
+  Search,
+  Settings2,
+  Ticket,
+  Wallet,
+} from "lucide-react";
 import Link from "next/link";
+import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
@@ -175,11 +187,18 @@ function CustomerDashboard() {
 function StaffDashboard() {
   const { user } = useAuth();
   const { data: lots, isLoading, isError, error, refetch } = useParkingLots();
+  const [search, setSearch] = useState("");
 
-  const myLots =
-    user?.role === "MANAGER"
-      ? lots?.filter((lot) => lot.managerId === user.id)
-      : lots;
+  const myLots = useMemo(() => {
+    const scoped =
+      user?.role === "MANAGER" ? lots?.filter((lot) => lot.managerId === user.id) : lots;
+    const query = search.trim().toLowerCase();
+    if (!query) return scoped;
+    return scoped?.filter(
+      (lot) =>
+        lot.name.toLowerCase().includes(query) || lot.address.toLowerCase().includes(query),
+    );
+  }, [lots, user, search]);
 
   return (
     <div className="space-y-6">
@@ -189,45 +208,56 @@ function StaffDashboard() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Card>
-          <CardContent className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-full bg-primary/10">
-                <Settings2 className="size-5 text-primary" />
+        <Link href="/parking-lots" className="block">
+          <Card className="transition-colors hover:bg-accent">
+            <CardContent className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex size-10 items-center justify-center rounded-full bg-primary/10">
+                  <Settings2 className="size-5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-medium">Manage Parking Lots</p>
+                  <p className="text-xs text-muted-foreground">Create, edit, and monitor lots</p>
+                </div>
               </div>
-              <div>
-                <p className="font-medium">Manage Parking Lots</p>
-                <p className="text-xs text-muted-foreground">Create, edit, and monitor lots</p>
+              <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/checkpoint" className="block">
+          <Card className="transition-colors hover:bg-accent">
+            <CardContent className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex size-10 items-center justify-center rounded-full bg-primary/10">
+                  <ScanLine className="size-5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-medium">Checkpoint Scanner</p>
+                  <p className="text-xs text-muted-foreground">Check vehicles in and out</p>
+                </div>
               </div>
-            </div>
-            <Button render={<Link href="/admin/parking-lots" />} nativeButton={false}>
-              Open
-            </Button>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-full bg-primary/10">
-                <ScanLine className="size-5 text-primary" />
-              </div>
-              <div>
-                <p className="font-medium">Checkpoint Scanner</p>
-                <p className="text-xs text-muted-foreground">Check vehicles in and out</p>
-              </div>
-            </div>
-            <Button render={<Link href="/checkpoint" />} nativeButton={false}>
-              Open
-            </Button>
-          </CardContent>
-        </Card>
+              <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       <Card>
         <CardContent className="space-y-3">
-          <h2 className="font-heading font-medium">
-            {user?.role === "MANAGER" ? "Your Parking Lots" : "All Parking Lots"}
-          </h2>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="font-heading font-medium">
+              {user?.role === "MANAGER" ? "Your Parking Lots" : "All Parking Lots"}
+            </h2>
+            <div className="relative w-full max-w-xs">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search lots…"
+                className="pl-9"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+          </div>
           {isLoading ? (
             <div className="space-y-2">
               <Skeleton className="h-14 w-full rounded-lg" />

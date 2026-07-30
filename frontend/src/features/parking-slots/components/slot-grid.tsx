@@ -17,10 +17,17 @@ function rowSort(a: string, b: string) {
 }
 
 const STATUS_STYLE: Record<string, string> = {
-  AVAILABLE: "bg-success/15 text-success border-success/30 hover:bg-success/25",
+  AVAILABLE: "bg-success/15 text-success border-success/30",
   RESERVED: "bg-warning/15 text-warning-foreground border-warning/30",
   OCCUPIED: "bg-muted text-muted-foreground border-border",
   MAINTENANCE: "bg-destructive/10 text-destructive border-destructive/30",
+};
+
+// Hover feedback only makes sense on slots that are actually clickable — kept separate from
+// STATUS_STYLE so a read-only grid (no onSelectSlot/onToggleSlot) never looks interactive.
+const HOVER_STYLE: Record<string, string> = {
+  AVAILABLE: "hover:bg-success/25",
+  MAINTENANCE: "hover:bg-destructive/20",
 };
 
 // When availableForWindow is present (a specific arrival/duration was searched), it — not
@@ -32,14 +39,30 @@ function displayStatus(slot: ParkingSlot): string {
   return slot.availableForWindow ? "AVAILABLE" : "RESERVED";
 }
 
+function slotTitle(slot: ParkingSlot, status: string, variant: "book" | "manage"): string {
+  if (variant !== "manage" || !slot.restrictedReason) {
+    return `${slot.slotNumber} — ${status}`;
+  }
+  return `${slot.slotNumber} — ${status}: ${slot.restrictedReason}`;
+}
+
 export function SlotGrid({
   slots,
   selectedSlotId,
   onSelectSlot,
+  variant = "book",
+  selectedSlotIds,
+  onToggleSelect,
 }: {
   slots: ParkingSlot[];
   selectedSlotId?: string;
   onSelectSlot?: (slot: ParkingSlot) => void;
+  /** "manage" lets staff click/multi-select AVAILABLE/MAINTENANCE slots to restrict or
+   * unrestrict them in bulk, instead of selecting a single slot to book. */
+  variant?: "book" | "manage";
+  /** Slot ids currently selected for a bulk restrict/unrestrict action (manage mode only). */
+  selectedSlotIds?: Set<string>;
+  onToggleSelect?: (slot: ParkingSlot) => void;
 }) {
   const rows = Array.from(new Set(slots.map((s) => parseSlot(s.slotNumber).row))).sort(rowSort);
 
@@ -57,20 +80,28 @@ export function SlotGrid({
               </span>
               {rowSlots.map((slot) => {
                 const status = displayStatus(slot);
-                const interactive = onSelectSlot && status === "AVAILABLE";
+                const interactive =
+                  variant === "manage"
+                    ? Boolean(onToggleSelect) && (status === "AVAILABLE" || status === "MAINTENANCE")
+                    : Boolean(onSelectSlot) && status === "AVAILABLE";
+                const selected =
+                  variant === "manage" ? (selectedSlotIds?.has(slot.id) ?? false) : selectedSlotId === slot.id;
                 return (
                   <button
                     key={slot.id}
                     type="button"
                     disabled={!interactive}
-                    onClick={() => interactive && onSelectSlot(slot)}
-                    title={`${slot.slotNumber} — ${status}`}
+                    onClick={() => {
+                      if (!interactive) return;
+                      if (variant === "manage") onToggleSelect?.(slot);
+                      else onSelectSlot?.(slot);
+                    }}
+                    title={slotTitle(slot, status, variant)}
                     className={cn(
                       "flex size-8 shrink-0 items-center justify-center rounded-md border text-[10px] font-medium transition-colors",
                       STATUS_STYLE[status],
-                      interactive && "cursor-pointer",
-                      !interactive && status !== "AVAILABLE" && "cursor-not-allowed",
-                      selectedSlotId === slot.id && "ring-2 ring-primary ring-offset-1 ring-offset-background",
+                      interactive ? cn("cursor-pointer", HOVER_STYLE[status]) : "cursor-default",
+                      selected && "ring-2 ring-primary ring-offset-1 ring-offset-background",
                     )}
                   >
                     {slot.slotNumber}
@@ -89,7 +120,7 @@ export function SlotGrid({
           <span className="size-3 rounded-sm bg-warning/40" /> Reserved
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="size-3 rounded-sm bg-muted" /> Occupied
+          <span className="size-3 rounded-sm bg-muted-foreground/40" /> Occupied
         </span>
         <span className="flex items-center gap-1.5">
           <span className="size-3 rounded-sm bg-destructive/30" /> Maintenance

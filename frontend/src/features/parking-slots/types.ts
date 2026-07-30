@@ -14,6 +14,8 @@ export interface ParkingSlot {
   slotNumber: string;
   type: SlotType;
   status: SlotStatus;
+  /** Set when status is MAINTENANCE, cleared when back to AVAILABLE. */
+  restrictedReason?: string | null;
   basePrice: string;
   /** Only present when the search included arrivalTime/durationMinutes. */
   availableForWindow?: boolean;
@@ -25,4 +27,10 @@ export interface FindSlotsParams {
   status?: SlotStatus;
   arrivalTime?: string;
   durationMinutes?: number;
+}
+
+export interface BulkUpdateSlotStatusPayload {
+  slotIds: string[];
+  status: "AVAILABLE" | "MAINTENANCE";
+  reason?: string;
 }

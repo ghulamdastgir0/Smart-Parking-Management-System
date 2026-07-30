@@ -3,6 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Check, Download } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -29,6 +30,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
+import { useAuth } from "@/features/auth/auth-provider";
 import { useFloors, useParkingLot } from "@/features/parking-lots/hooks";
 import { SlotGrid } from "@/features/parking-slots/components/slot-grid";
 import { useFloorSlotsForWindow } from "@/features/parking-slots/hooks";
@@ -120,6 +122,8 @@ export default function BookingPage({
   params: Promise<{ id: string }>;
 }) {
   const { id: lotId } = use(params);
+  const router = useRouter();
+  const { user } = useAuth();
   const { data: lot } = useParkingLot(lotId);
   const { data: floors, isLoading: floorsLoading } = useFloors(lotId);
   // Always a defined string so Tabs stays controlled from the first render.
@@ -130,6 +134,14 @@ export default function BookingPage({
       setSelectedFloorId(floors[0].id);
     }
   }, [floors, selectedFloorId]);
+
+  // Only customers can book parking — staff who land here directly (e.g. a stale bookmark)
+  // get bounced back to the lot's management view instead.
+  useEffect(() => {
+    if (user && user.role !== "CUSTOMER") {
+      router.replace(`/parking-lots/${lotId}`);
+    }
+  }, [user, lotId, router]);
 
   const createReservation = useCreateReservation();
 
@@ -248,7 +260,7 @@ export default function BookingPage({
             View Reservation Details
           </Button>
           <Button
-            variant="outline"
+            variant="secondary"
             size="icon"
             render={
               <a
@@ -392,7 +404,7 @@ export default function BookingPage({
                 onSelectSlot={setSelectedSlot}
               />
             )}
-            <div className="flex items-center justify-between border-t border-border pt-4">
+            <div className="space-y-3 border-t border-border pt-4">
               {selectedSlot ? (
                 <div className="text-sm">
                   Slot <span className="font-medium">{selectedSlot.slotNumber}</span> ·{" "}
@@ -404,7 +416,7 @@ export default function BookingPage({
                   Select an available slot for your chosen time to continue
                 </p>
               )}
-              <div className="flex gap-2">
+              <div className="flex justify-between">
                 <Button variant="outline" onClick={() => setStep(0)}>
                   Back
                 </Button>

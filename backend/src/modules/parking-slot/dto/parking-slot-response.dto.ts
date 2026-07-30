@@ -34,6 +34,14 @@ export class ParkingSlotResponseDto {
   @ApiProperty({ enum: SlotStatus })
   status!: SlotStatus;
 
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    description:
+      'Set when status is MAINTENANCE, cleared when back to AVAILABLE.',
+  })
+  restrictedReason?: string | null;
+
   @ApiProperty()
   basePrice!: string;
 
@@ -41,7 +49,7 @@ export class ParkingSlotResponseDto {
     required: false,
     description:
       'Whether this slot is actually free for the requested arrivalTime/durationMinutes ' +
-      "window. Only present when both were given in the search request — otherwise the " +
+      'window. Only present when both were given in the search request — otherwise the ' +
       'plain status field is the only signal.',
   })
   availableForWindow?: boolean;

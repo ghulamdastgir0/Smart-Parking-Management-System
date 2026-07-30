@@ -18,6 +18,9 @@ export class UserResponseDto {
   role!: Role;
 
   @ApiProperty()
+  isBlocked!: boolean;
+
+  @ApiProperty()
   createdAt!: Date;
 
   @ApiProperty({

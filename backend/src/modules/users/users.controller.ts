@@ -25,9 +25,10 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 import { ChangePasswordDto } from './dto/change-password.dto';
-import { CreateUserDto } from './dto/create-user.dto';
+import { CreateStaffDto } from './dto/create-staff.dto';
 import { PaymentMethodResponseDto } from './dto/payment-method-response.dto';
 import { SavePaymentMethodDto } from './dto/save-payment-method.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { UsersService } from './users.service';
 
@@ -37,29 +38,6 @@ import { UsersService } from './users.service';
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
-
-  @Post()
-  @Roles(Role.ADMIN)
-  @ApiOperation({
-    summary: 'Create a user with any role (Admin only)',
-    description:
-      'The only way to create MANAGER or ADMIN accounts — public registration ' +
-      '(POST /auth/register) always creates a CUSTOMER. The new account logs in normally ' +
-      'via POST /auth/login.',
-  })
-  @ApiResponse({
-    status: 201,
-    description: 'User created',
-    type: UserResponseDto,
-  })
-  @ApiResponse({ status: 409, description: 'Email already registered' })
-  create(
-    @Body() dto: CreateUserDto,
-    @Req() req: Request,
-  ): Promise<UserResponseDto> {
-    const admin = req.user as AuthenticatedUser;
-    return this.usersService.create(dto, admin.userId);
-  }
 
   @Get()
   @Roles(Role.ADMIN)
@@ -74,7 +52,7 @@ export class UsersController {
   }
 
   @Get('me')
-  @ApiOperation({ summary: 'Get the authenticated user\'s own profile' })
+  @ApiOperation({ summary: "Get the authenticated user's own profile" })
   @ApiResponse({
     status: 200,
     description: 'Current user',
@@ -85,9 +63,38 @@ export class UsersController {
     return this.usersService.findOne(user.userId);
   }
 
+  @Patch('me')
+  @ApiOperation({ summary: "Update the authenticated user's own profile" })
+  @ApiResponse({
+    status: 200,
+    description: 'Profile updated',
+    type: UserResponseDto,
+  })
+  @ApiResponse({ status: 409, description: 'Email already registered' })
+  updateMe(
+    @Body() dto: UpdateProfileDto,
+    @Req() req: Request,
+  ): Promise<UserResponseDto> {
+    const user = req.user as AuthenticatedUser;
+    return this.usersService.updateProfile(user.userId, dto, user.role);
+  }
+
+  @Delete('me')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: "Delete the authenticated user's own account" })
+  @ApiResponse({ status: 204, description: 'Account deleted' })
+  @ApiResponse({
+    status: 409,
+    description: 'You manage a parking lot — reassign it first',
+  })
+  removeMe(@Req() req: Request): Promise<void> {
+    const user = req.user as AuthenticatedUser;
+    return this.usersService.removeSelf(user.userId);
+  }
+
   @Patch('me/password')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Change the authenticated user\'s own password' })
+  @ApiOperation({ summary: "Change the authenticated user's own password" })
   @ApiResponse({ status: 204, description: 'Password changed' })
   @ApiResponse({ status: 401, description: 'Current password is incorrect' })
   changeMyPassword(
@@ -119,7 +126,9 @@ export class UsersController {
   }
 
   @Get('me/payment-method')
-  @ApiOperation({ summary: "Get the authenticated user's saved payment method" })
+  @ApiOperation({
+    summary: "Get the authenticated user's saved payment method",
+  })
   @ApiResponse({
     status: 200,
     description: 'Payment method found',
@@ -129,6 +138,45 @@ export class UsersController {
   getPaymentMethod(@Req() req: Request): Promise<PaymentMethodResponseDto> {
     const user = req.user as AuthenticatedUser;
     return this.usersService.getPaymentMethod(user.userId);
+  }
+
+  @Post('staff')
+  @Roles(Role.ADMIN)
+  @ApiOperation({
+    summary: 'Create a manager or admin account (Admin only)',
+    description:
+      'Manager and admin are the roles an admin still provisions directly — public ' +
+      'registration always creates a CUSTOMER, and this is separate from the general user ' +
+      'list, which is view/block-only.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Staff account created',
+    type: UserResponseDto,
+  })
+  @ApiResponse({ status: 409, description: 'Email already registered' })
+  createStaff(
+    @Body() dto: CreateStaffDto,
+    @Req() req: Request,
+  ): Promise<UserResponseDto> {
+    const admin = req.user as AuthenticatedUser;
+    return this.usersService.createStaff(dto, admin.userId);
+  }
+
+  @Delete('managers/:id')
+  @Roles(Role.ADMIN)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete a manager account (Admin only)' })
+  @ApiResponse({ status: 204, description: 'Manager deleted' })
+  @ApiResponse({ status: 400, description: 'Target is not a manager account' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  @ApiResponse({
+    status: 409,
+    description: 'This manager still manages a parking lot',
+  })
+  removeManager(@Param('id') id: string, @Req() req: Request): Promise<void> {
+    const admin = req.user as AuthenticatedUser;
+    return this.usersService.removeManager(id, admin.userId);
   }
 
   @Get(':id')
@@ -144,19 +192,62 @@ export class UsersController {
     return this.usersService.findOne(id);
   }
 
-  @Delete(':id')
+  @Patch(':id')
   @Roles(Role.ADMIN)
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Delete a user (Admin only)' })
-  @ApiResponse({ status: 204, description: 'User deleted' })
-  @ApiResponse({ status: 400, description: 'Cannot delete your own account' })
-  @ApiResponse({ status: 404, description: 'User not found' })
+  @ApiOperation({ summary: "Update another user's profile (Admin only)" })
   @ApiResponse({
-    status: 409,
-    description: 'User still has reservations or manages a parking lot',
+    status: 200,
+    description: 'Profile updated',
+    type: UserResponseDto,
   })
-  remove(@Param('id') id: string, @Req() req: Request): Promise<void> {
+  @ApiResponse({ status: 404, description: 'User not found' })
+  @ApiResponse({ status: 409, description: 'Email already registered' })
+  updateUser(
+    @Param('id') id: string,
+    @Body() dto: UpdateProfileDto,
+    @Req() req: Request,
+  ): Promise<UserResponseDto> {
     const admin = req.user as AuthenticatedUser;
-    return this.usersService.remove(id, admin.userId);
+    return this.usersService.adminUpdateProfile(id, dto, admin.userId);
+  }
+
+  @Patch(':id/block')
+  @Roles(Role.ADMIN)
+  @ApiOperation({
+    summary: 'Block a user (Admin only)',
+    description:
+      'Blocks future logins and force-cancels any CONFIRMED reservations, freeing their ' +
+      'slots. CHECKED_IN reservations are left untouched.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'User blocked',
+    type: UserResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Cannot block your own account' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  block(
+    @Param('id') id: string,
+    @Req() req: Request,
+  ): Promise<UserResponseDto> {
+    const admin = req.user as AuthenticatedUser;
+    return this.usersService.block(id, admin.userId);
+  }
+
+  @Patch(':id/unblock')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Unblock a user (Admin only)' })
+  @ApiResponse({
+    status: 200,
+    description: 'User unblocked',
+    type: UserResponseDto,
+  })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  unblock(
+    @Param('id') id: string,
+    @Req() req: Request,
+  ): Promise<UserResponseDto> {
+    const admin = req.user as AuthenticatedUser;
+    return this.usersService.unblock(id, admin.userId);
   }
 }

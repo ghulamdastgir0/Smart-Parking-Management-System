@@ -40,8 +40,11 @@ export class ReservationController {
   constructor(private readonly reservationService: ReservationService) {}
 
   @Post()
+  @UseGuards(RolesGuard)
+  @Roles(Role.CUSTOMER)
   @ApiOperation({
-    summary: 'Create a time-slot reservation for a parking slot',
+    summary:
+      'Create a time-slot reservation for a parking slot (Customer only)',
     description:
       'No payment is collected here. Validates the requested interval (arrival → arrival + ' +
       'duration + 30-minute grace buffer) does not overlap any other active reservation for ' +
@@ -52,6 +55,10 @@ export class ReservationController {
     status: 201,
     description: 'Reservation confirmed',
     type: CreateReservationResponseDto,
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Staff accounts cannot book parking',
   })
   @ApiResponse({
     status: 409,
@@ -76,8 +83,8 @@ export class ReservationController {
   @ApiOperation({
     summary: 'List every reservation at a parking lot (Admin/Manager only)',
     description:
-      'Unlike GET /reservations/mine, this returns every customer\'s reservations for the ' +
-      'given lot, not just the requesting staff member\'s own bookings. Managers may only ' +
+      "Unlike GET /reservations/mine, this returns every customer's reservations for the " +
+      "given lot, not just the requesting staff member's own bookings. Managers may only " +
       'query lots they manage.',
   })
   @ApiResponse({
@@ -125,7 +132,8 @@ export class ReservationController {
   @ApiResponse({ status: 404, description: 'Reservation not found' })
   @ApiResponse({
     status: 409,
-    description: 'Reservation is not CONFIRMED, so it can no longer be cancelled',
+    description:
+      'Reservation is not CONFIRMED, so it can no longer be cancelled',
   })
   cancel(
     @Param('id') id: string,

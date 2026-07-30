@@ -69,7 +69,11 @@ export class ReservationService {
     }
 
     const maxAdvanceDays = this.getMaxAdvanceDays();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfToday = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+    );
     const latestAllowedArrival = new Date(
       startOfToday.getTime() + maxAdvanceDays * 24 * 60 * 60 * 1000,
     );
@@ -93,6 +97,18 @@ export class ReservationService {
       });
       if (!slot) {
         throw new NotFoundException(`Parking slot ${dto.slotId} not found`);
+      }
+
+      // Defense in depth — a customer shouldn't be able to reach this lot's booking flow at
+      // all once it's deactivated, but a stale client-side cache could still submit here.
+      const lot = await tx.parkingLot.findUnique({
+        where: { id: slot.lotId },
+        select: { isActive: true },
+      });
+      if (!lot?.isActive) {
+        throw new ConflictException(
+          'This parking lot is no longer accepting reservations',
+        );
       }
 
       // Row-lock the slot so two concurrent reservation attempts for it serialize instead

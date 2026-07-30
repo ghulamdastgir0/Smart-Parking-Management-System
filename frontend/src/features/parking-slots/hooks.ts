@@ -1,7 +1,10 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { getApiErrorMessage } from "@/lib/api-error";
 import { parkingSlotsApi } from "./api";
+import type { BulkUpdateSlotStatusPayload } from "./types";
 
 export function useFloorSlots(lotId: string, floorId: string) {
   return useQuery({
@@ -30,5 +33,18 @@ export function useParkingSlot(id: string) {
     queryKey: ["parking-slots", id],
     queryFn: () => parkingSlotsApi.findOne(id),
     enabled: Boolean(id),
+  });
+}
+
+export function useBulkUpdateSlotStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: BulkUpdateSlotStatusPayload) =>
+      parkingSlotsApi.bulkUpdateStatus(payload),
+    onSuccess: ({ updatedCount }) => {
+      toast.success(`${updatedCount} slot${updatedCount === 1 ? "" : "s"} updated`);
+      queryClient.invalidateQueries({ queryKey: ["parking-slots"] });
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error)),
   });
 }

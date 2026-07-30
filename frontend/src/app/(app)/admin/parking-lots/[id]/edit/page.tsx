@@ -26,7 +26,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { useAuth } from "@/features/auth/auth-provider";
@@ -168,6 +170,7 @@ const schema = z.object({
     .min(1, "Address is required")
     .max(255, "Address must be 255 characters or fewer"),
   managerId: z.string(),
+  isActive: z.boolean(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -190,14 +193,19 @@ export default function EditParkingLotPage({
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: "", address: "", managerId: "" },
+    defaultValues: { name: "", address: "", managerId: "", isActive: true },
     mode: "onBlur",
   });
 
   useEffect(() => {
     if (!lot) return;
     // Sync the form and map once the lot loads — deliberate, not derivable during render.
-    form.reset({ name: lot.name, address: lot.address, managerId: lot.managerId });
+    form.reset({
+      name: lot.name,
+      address: lot.address,
+      managerId: lot.managerId,
+      isActive: lot.isActive,
+    });
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPosition([lot.latitude, lot.longitude]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -212,8 +220,9 @@ export default function EditParkingLotPage({
         latitude: position[0],
         longitude: position[1],
         managerId: user?.role === "ADMIN" && values.managerId ? values.managerId : undefined,
+        isActive: values.isActive,
       },
-      { onSuccess: () => router.push("/admin/parking-lots") },
+      { onSuccess: () => router.push("/parking-lots") },
     );
   }
 
@@ -293,6 +302,18 @@ export default function EditParkingLotPage({
                   )}
                 />
               )}
+              <div className="flex items-center justify-between border-t border-border pt-4">
+                <div>
+                  <Label>Lot is active</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Deactivate to hide this lot from customers without deleting it.
+                  </p>
+                </div>
+                <Switch
+                  checked={form.watch("isActive")}
+                  onCheckedChange={(v) => form.setValue("isActive", v)}
+                />
+              </div>
               <div className="flex justify-end gap-2 border-t border-border pt-4">
                 <Button type="button" variant="outline" onClick={() => router.back()}>
                   Cancel

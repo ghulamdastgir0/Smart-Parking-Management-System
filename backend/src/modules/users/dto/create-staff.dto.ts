@@ -2,7 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import {
   IsEmail,
-  IsEnum,
+  IsIn,
   IsNotEmpty,
   IsString,
   MaxLength,
@@ -10,7 +10,11 @@ import {
 } from 'class-validator';
 import { IsPasswordComplex } from '../../../common/validators/password-complexity.validator';
 
-export class CreateUserDto {
+// Public registration always creates a CUSTOMER — MANAGER and ADMIN accounts are the two
+// roles an admin still provisions directly, so this deliberately excludes CUSTOMER.
+export const STAFF_ROLES = [Role.MANAGER, Role.ADMIN] as const;
+
+export class CreateStaffDto {
   @ApiProperty({ example: 'jane.manager@example.com' })
   @IsEmail()
   @MaxLength(254)
@@ -35,7 +39,7 @@ export class CreateUserDto {
   @MaxLength(20)
   lastName!: string;
 
-  @ApiProperty({ enum: Role, example: Role.MANAGER })
-  @IsEnum(Role)
-  role!: Role;
+  @ApiProperty({ enum: STAFF_ROLES, example: Role.MANAGER })
+  @IsIn(STAFF_ROLES)
+  role!: (typeof STAFF_ROLES)[number];
 }

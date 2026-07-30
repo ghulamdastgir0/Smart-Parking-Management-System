@@ -1,4 +1,5 @@
-import { OmitType, PartialType } from '@nestjs/swagger';
+import { ApiPropertyOptional, OmitType, PartialType } from '@nestjs/swagger';
+import { IsBoolean, IsOptional } from 'class-validator';
 import { CreateParkingLotDto } from './create-parking-lot.dto';
 
 // Floor layout is configured at creation (and via the dedicated floor endpoints) and drives
@@ -9,4 +10,14 @@ class UpdatableParkingLotFields extends OmitType(CreateParkingLotDto, [
 
 export class UpdateParkingLotDto extends PartialType(
   UpdatableParkingLotFields,
-) {}
+) {
+  // Not inherited from CreateParkingLotDto — a lot always starts active; only an update can
+  // deactivate one.
+  @ApiPropertyOptional({
+    description:
+      'Deactivate a lot to hide it from customers without deleting it.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}

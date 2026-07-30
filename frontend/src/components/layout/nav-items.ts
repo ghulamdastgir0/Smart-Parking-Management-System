@@ -3,9 +3,9 @@ import {
   LayoutDashboard,
   MapPin,
   ScanLine,
-  Settings2,
   Ticket,
   User,
+  UserCog,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -40,18 +40,13 @@ export const NAV_ITEMS: NavItem[] = [
     roles: ["ADMIN", "MANAGER"],
   },
   {
-    href: "/admin/parking-lots",
-    label: "Manage Lots",
-    icon: Settings2,
-    roles: ["ADMIN", "MANAGER"],
-  },
-  {
     href: "/checkpoint",
     label: "Checkpoint",
     icon: ScanLine,
     roles: ["ADMIN", "MANAGER"],
   },
   { href: "/admin/users", label: "Users", icon: Users, roles: ["ADMIN"] },
+  { href: "/admin/managers", label: "Staff", icon: UserCog, roles: ["ADMIN"] },
   { href: "/profile", label: "Profile", icon: User },
 ];
 
