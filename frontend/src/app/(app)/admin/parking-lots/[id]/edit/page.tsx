@@ -251,7 +251,7 @@ export default function EditParkingLotPage({
                   <FormItem>
                     <FormLabel>Lot Name</FormLabel>
                     <FormControl>
-                      <Input {...field} />
+                      <Input placeholder="e.g. Downtown Garage" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -264,7 +264,7 @@ export default function EditParkingLotPage({
                   <FormItem>
                     <FormLabel>Address</FormLabel>
                     <FormControl>
-                      <Input {...field} />
+                      <Input placeholder="Street address" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

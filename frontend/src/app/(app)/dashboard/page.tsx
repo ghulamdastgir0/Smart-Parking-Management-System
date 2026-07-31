@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
@@ -245,16 +246,19 @@ function StaffDashboard() {
       <Card>
         <CardContent className="space-y-3">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="font-heading font-medium">
+            <h2 className="min-w-0 truncate font-heading font-medium">
               {user?.role === "MANAGER" ? "Your Parking Lots" : "All Parking Lots"}
             </h2>
-            <div className="relative w-full max-w-xs">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <div className="relative shrink-0">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search lots…"
-                className="pl-9"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                className={cn(
+                  "pl-9 transition-all duration-200 ease-out focus:w-40 sm:w-48 sm:focus:w-56",
+                  search ? "w-40" : "w-9",
+                )}
               />
             </div>
           </div>

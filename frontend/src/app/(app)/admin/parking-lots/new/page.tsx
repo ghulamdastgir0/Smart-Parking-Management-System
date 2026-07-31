@@ -185,7 +185,7 @@ export default function NewParkingLotPage() {
                   <FormItem>
                     <FormLabel>Lot Name</FormLabel>
                     <FormControl>
-                      <Input {...field} />
+                      <Input placeholder="e.g. Downtown Garage" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

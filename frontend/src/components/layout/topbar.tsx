@@ -16,7 +16,6 @@ import {
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { useAuth } from "@/features/auth/auth-provider";
 import { Breadcrumbs } from "./breadcrumbs";
-import { MobileDrawer } from "./mobile-drawer";
 import { NotificationBell } from "./notification-bell";
 
 function initials(firstName?: string, lastName?: string): string {
@@ -28,8 +27,7 @@ export function Topbar() {
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/95 px-4 backdrop-blur supports-backdrop-filter:bg-background/80">
-      <MobileDrawer />
-      <div className="flex-1">
+      <div className="min-w-0 flex-1 overflow-x-auto">
         <Breadcrumbs />
       </div>
       <NotificationBell />

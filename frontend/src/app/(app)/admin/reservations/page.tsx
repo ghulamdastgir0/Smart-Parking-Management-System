@@ -1,6 +1,6 @@
 "use client";
 
-import { Ticket } from "lucide-react";
+import { Eye, Ticket, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -52,8 +52,14 @@ function CancelButton({ reservation }: { reservation: Reservation }) {
 
   return (
     <>
-      <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setOpen(true)}>
-        Cancel
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        className="text-destructive"
+        title="Cancel reservation"
+        onClick={() => setOpen(true)}
+      >
+        <XCircle className="size-3.5" />
       </Button>
       <ConfirmDialog
         open={open}
@@ -213,11 +219,12 @@ export default function AdminReservationsPage() {
                           <CancelButton reservation={r} />
                           <Button
                             variant="ghost"
-                            size="sm"
+                            size="icon-sm"
+                            title="View reservation"
                             render={<Link href={`/reservations/${r.id}`} />}
                             nativeButton={false}
                           >
-                            View
+                            <Eye className="size-3.5" />
                           </Button>
                         </div>
                       </TableCell>

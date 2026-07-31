@@ -130,7 +130,7 @@ function EditProfileDialog({
                   <FormItem>
                     <FormLabel>First name</FormLabel>
                     <FormControl>
-                      <Input maxLength={20} {...field} />
+                      <Input placeholder="Jane" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -143,7 +143,7 @@ function EditProfileDialog({
                   <FormItem>
                     <FormLabel>Last name</FormLabel>
                     <FormControl>
-                      <Input maxLength={20} {...field} />
+                      <Input placeholder="Doe" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -157,7 +157,12 @@ function EditProfileDialog({
                 <FormItem>
                   <FormLabel>Email</FormLabel>
                   <FormControl>
-                    <Input autoComplete="email" disabled={emailLocked} {...field} />
+                    <Input
+                      placeholder="you@example.com"
+                      autoComplete="email"
+                      disabled={emailLocked}
+                      {...field}
+                    />
                   </FormControl>
                   {emailLocked && (
                     <p className="text-xs text-muted-foreground">
@@ -232,7 +237,12 @@ function ChangePasswordDialog({
                 <FormItem>
                   <FormLabel>Current password</FormLabel>
                   <FormControl>
-                    <Input type="password" autoComplete="current-password" {...field} />
+                    <Input
+                      type="password"
+                      placeholder="Enter your current password"
+                      autoComplete="current-password"
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -245,7 +255,12 @@ function ChangePasswordDialog({
                 <FormItem>
                   <FormLabel>New password</FormLabel>
                   <FormControl>
-                    <Input type="password" autoComplete="new-password" {...field} />
+                    <Input
+                      type="password"
+                      placeholder="At least 8 characters"
+                      autoComplete="new-password"
+                      {...field}
+                    />
                   </FormControl>
                   <PasswordStrength password={newPassword} />
                   <FormMessage />
@@ -259,7 +274,12 @@ function ChangePasswordDialog({
                 <FormItem>
                   <FormLabel>Confirm new password</FormLabel>
                   <FormControl>
-                    <Input type="password" autoComplete="new-password" {...field} />
+                    <Input
+                      type="password"
+                      placeholder="Re-enter your new password"
+                      autoComplete="new-password"
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

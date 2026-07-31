@@ -68,7 +68,7 @@ export default function NewManagerPage() {
                     <FormItem>
                       <FormLabel>First name</FormLabel>
                       <FormControl>
-                        <Input autoComplete="given-name" maxLength={20} {...field} />
+                        <Input placeholder="Jane" autoComplete="given-name" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -81,7 +81,7 @@ export default function NewManagerPage() {
                     <FormItem>
                       <FormLabel>Last name</FormLabel>
                       <FormControl>
-                        <Input autoComplete="family-name" maxLength={20} {...field} />
+                        <Input placeholder="Doe" autoComplete="family-name" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -108,7 +108,12 @@ export default function NewManagerPage() {
                   <FormItem>
                     <FormLabel>Password</FormLabel>
                     <FormControl>
-                      <Input type="password" autoComplete="new-password" {...field} />
+                      <Input
+                        type="password"
+                        placeholder="At least 8 characters"
+                        autoComplete="new-password"
+                        {...field}
+                      />
                     </FormControl>
                     <PasswordStrength password={password} />
                     <FormMessage />

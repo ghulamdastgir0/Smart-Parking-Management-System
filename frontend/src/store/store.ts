@@ -1,11 +1,9 @@
 import { configureStore } from "@reduxjs/toolkit";
 import filtersReducer from "./slices/filters-slice";
-import uiReducer from "./slices/ui-slice";
 
 export function makeStore() {
   return configureStore({
     reducer: {
-      ui: uiReducer,
       filters: filtersReducer,
     },
   });

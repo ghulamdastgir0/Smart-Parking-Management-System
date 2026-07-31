@@ -102,7 +102,7 @@ export default function RegisterPage() {
                 <FormItem>
                   <FormLabel>First name</FormLabel>
                   <FormControl>
-                    <Input autoComplete="given-name" maxLength={20} {...field} />
+                    <Input placeholder="Jane" autoComplete="given-name" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -115,7 +115,7 @@ export default function RegisterPage() {
                 <FormItem>
                   <FormLabel>Last name</FormLabel>
                   <FormControl>
-                    <Input autoComplete="family-name" maxLength={20} {...field} />
+                    <Input placeholder="Doe" autoComplete="family-name" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -142,7 +142,12 @@ export default function RegisterPage() {
               <FormItem>
                 <FormLabel>Password</FormLabel>
                 <FormControl>
-                  <Input type="password" autoComplete="new-password" {...field} />
+                  <Input
+                    type="password"
+                    placeholder="At least 8 characters"
+                    autoComplete="new-password"
+                    {...field}
+                  />
                 </FormControl>
                 <PasswordStrength password={password} />
                 <FormMessage />
@@ -156,7 +161,12 @@ export default function RegisterPage() {
               <FormItem>
                 <FormLabel>Confirm password</FormLabel>
                 <FormControl>
-                  <Input type="password" autoComplete="new-password" {...field} />
+                  <Input
+                    type="password"
+                    placeholder="Re-enter your password"
+                    autoComplete="new-password"
+                    {...field}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
