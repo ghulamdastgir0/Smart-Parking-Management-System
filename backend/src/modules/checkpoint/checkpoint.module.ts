@@ -8,5 +8,6 @@ import { CheckpointService } from './checkpoint.service';
   imports: [AuthModule, ReservationModule],
   controllers: [CheckpointController],
   providers: [CheckpointService],
+  exports: [CheckpointService],
 })
 export class CheckpointModule {}

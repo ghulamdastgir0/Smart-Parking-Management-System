@@ -73,9 +73,10 @@ model User {
   updatedAt    DateTime      @updatedAt
 
   // Relations
-  managedLots   ParkingLot[]   @relation("ManagerLots")
-  reservations  Reservation[]
-  paymentMethod PaymentMethod?
+  managedLots      ParkingLot[]     @relation("ManagerLots")
+  reservations     Reservation[]
+  paymentMethod    PaymentMethod?
+  uploadedPolicies PolicyDocument[]
 
   @@index([email])
 }
@@ -262,6 +263,37 @@ model Challan {
 
   @@unique([reservationId, type, forCheckoutAt])
   @@index([reservationId])
+}
+
+// Admin-uploaded company policy document (PDF), split into embedded chunks so the AI
+// assistant can answer policy questions grounded in the actual uploaded wording (RAG).
+model PolicyDocument {
+  id         String   @id @default(uuid())
+  title      String   @db.VarChar(150)
+  filename   String   @db.VarChar(255)
+  uploadedBy String
+  createdAt  DateTime @default(now())
+
+  // Relations
+  uploader User          @relation(fields: [uploadedBy], references: [id])
+  chunks   PolicyChunk[]
+}
+
+// One row per ~800-character chunk of a PolicyDocument. `embedding` is a 384-dim vector
+// from the local Xenova/all-MiniLM-L6-v2 model, stored as a plain float array — no pgvector
+// extension required, since the corpus is small enough for brute-force cosine similarity.
+model PolicyChunk {
+  id         String   @id @default(uuid())
+  documentId String
+  content    String
+  chunkIndex Int
+  embedding  Float[]
+  createdAt  DateTime @default(now())
+
+  // Relations
+  document PolicyDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
 }
 
 // Persisted in-app notification (no real email/SMS provider is wired up in this project —

@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { AssistantLauncher } from "@/components/assistant/assistant-launcher";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/features/auth/auth-provider";
 import { useRealtimeSync } from "@/hooks/use-realtime-sync";
@@ -72,6 +73,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <Topbar />
         <main className="flex-1 p-4 pb-20 sm:px-6 sm:pt-6 lg:pb-6">{children}</main>
         <BottomNav />
+        <AssistantLauncher />
       </div>
     </div>
   );

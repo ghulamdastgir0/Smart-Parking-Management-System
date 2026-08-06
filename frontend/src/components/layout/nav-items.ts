@@ -1,5 +1,6 @@
 import {
   Building2,
+  FileText,
   LayoutDashboard,
   MapPin,
   ScanLine,
@@ -53,6 +54,7 @@ export const NAV_ITEMS: NavItem[] = [
   },
   { href: "/admin/users", label: "Users", icon: Users, roles: ["ADMIN"] },
   { href: "/admin/managers", label: "Staff", icon: UserCog, roles: ["ADMIN"] },
+  { href: "/admin/policies", label: "Policies", icon: FileText, roles: ["ADMIN"] },
   { href: "/profile", label: "Profile", icon: User },
 ];
 

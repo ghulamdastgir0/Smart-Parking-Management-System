@@ -29,11 +29,14 @@ modules/
   reservation/     Booking, cancellation, billing, monitoring cron
   checkpoint/      QR check-in / check-out
   notification/    In-app notifications
+  policy/          Admin policy-PDF upload/list/delete + RAG chunk search
+  assistant/       AI assistant ("Adam") — LangGraph agent + tool registry, see below
 common/
   realtime/        Socket.IO gateway (per-user rooms)
   notification/    Notification persistence service
   audit/           Append-only audit logging
   qr/              QR token generation
+  embedding/       Local Xenova embedding model wrapper (used by policy RAG + assistant)
   exceptions/      Custom exceptions (e.g. slot-unavailable)
   filters/         Global HTTP exception filter
   validators/      Reusable class-validator decorators (password complexity, Luhn)
@@ -51,18 +54,22 @@ app/               Next.js App Router pages
                     route, branches by role between customer browse/book and
                     staff manage view), reservations, checkpoint, notifications,
                     profile, admin/{parking-lots/{new,[id]/edit},managers/{new},
-                    users,reservations}
+                    users,reservations,policies}
 components/
   ui/              shadcn/ui primitives (button, dialog, form, table, ...)
   layout/          app-shell, sidebar, topbar, bottom-nav, breadcrumbs
   map/             Leaflet map components (nearby search, location picker)
   shared/          empty-state, error-state, page-header, status-badge,
                     confirm-dialog (shared destructive-action confirmation)
+  assistant/       assistant-launcher (bottom-right FAB), assistant-panel
+                    (floating chat window for Adam, the AI assistant)
   auth/, checkpoint/, theme/
 features/          Feature-scoped API hooks (React Query) + types, one dir per
                     domain: auth, parking-lots (+ schemas.ts for the shared
                     floor Zod schema), parking-slots, reservations,
-                    checkpoint, notifications, users
+                    checkpoint, notifications, users, policies (admin PDF
+                    upload/list/delete), assistant (SSE chat client — raw
+                    fetch, not React Query, since it streams)
 store/             Redux Toolkit slices (filters, ui) — client/UI state only;
                     server state goes through React Query in features/*
 lib/               api-client (axios), auth-token, jwt, billing, format,
@@ -78,7 +85,7 @@ Pattern: server state = React Query (`features/*/api.ts` + `hooks.ts`); global U
 
 ## Tech stack
 
-- **Backend**: NestJS 11, Prisma ORM + PostgreSQL, JWT auth (`passport-jwt`), bcrypt, `@nestjs/websockets` + Socket.IO, `@nestjs/schedule` cron, `qrcode`, Swagger at `/api`.
+- **Backend**: NestJS 11, Prisma ORM + PostgreSQL, JWT auth (`passport-jwt`), bcrypt, `@nestjs/websockets` + Socket.IO, `@nestjs/schedule` cron, `qrcode`, Swagger at `/api`. AI assistant: `@langchain/langgraph` + `@langchain/google-genai` (Gemini) for the agent, `@xenova/transformers` (local, offline `Xenova/all-MiniLM-L6-v2`, 384-dim) for policy-doc/query embeddings, `pdf-parse` for PDF text extraction.
 - **Frontend**: Next.js 16 App Router, React 19, Redux Toolkit, TanStack React Query, Tailwind CSS + shadcn/ui, React Leaflet, `html5-qrcode`/`qrcode.react`, Socket.IO client, React Hook Form + Zod.
 
 ## Commands
@@ -107,7 +114,7 @@ There is no root-level install/build — run npm commands inside `backend/` or `
 
 ## Data model (Prisma)
 
-Core models: `User`, `PaymentMethod`, `ParkingLot`, `ParkingFloor`, `ParkingSlot`, `Reservation`, `Payment`, `QrCode`, `Challan` (extension/overtime charges), `Notification`, `OccupancyLog`, `AuditLog`.
+Core models: `User`, `PaymentMethod`, `ParkingLot`, `ParkingFloor`, `ParkingSlot`, `Reservation`, `Payment`, `QrCode`, `Challan` (extension/overtime charges), `Notification`, `OccupancyLog`, `AuditLog`, `PolicyDocument`, `PolicyChunk` (admin-uploaded policy PDFs, chunked + embedded for the AI assistant's RAG tool).
 
 - Slots belong to a floor, floors belong to a lot — pricing/status on the slot, row/column layout on the floor.
 - `Reservation.status`: `CONFIRMED → CHECKED_IN → (OVERTIME) → PENDING_PAYMENT → COMPLETED`, or `CANCELLED` on no-show.
@@ -116,6 +123,7 @@ Core models: `User`, `PaymentMethod`, `ParkingLot`, `ParkingFloor`, `ParkingSlot
 - `User.isBlocked` (default `false`) — see [Staff & account lifecycle](#staff--account-lifecycle).
 - `ParkingLot.isActive` (default `true`) — deactivated lots are hidden from customers (404 on direct access) but stay visible/manageable for staff.
 - `ParkingSlot.restrictedReason` (nullable) — set when `status` is toggled to `MAINTENANCE`, cleared when toggled back to `AVAILABLE`.
+- `PolicyChunk.embedding` is a plain `Float[]` (Postgres `double precision[]`) — deliberately **not** pgvector, so no Postgres extension is required. Similarity search is brute-force cosine in application code (`PolicyService.search()`), which is fine at this corpus size (dozens–hundreds of chunks per document).
 
 Full schema: [backend/prisma/schema.prisma](backend/prisma/schema.prisma). Always add a Prisma migration (`npm run prisma:migrate`) alongside any schema change — never hand-edit migration SQL after it's applied.
 
@@ -139,7 +147,7 @@ Book → check-in (QR scan, slot → OCCUPIED) → cron monitoring (no-show canc
 
 ## Roles & access control
 
-`CUSTOMER` (search/book/manage own profile — booking is CUSTOMER-only, enforced server-side via `@Roles(Role.CUSTOMER)` on `POST /reservations`), `MANAGER` (+ checkpoint scanning and slot/lot management for managed lots), `ADMIN` (full: lots/floors/staff/all reservations). Enforced via `JwtAuthGuard` + `RolesGuard`/`@Roles()`.
+`CUSTOMER` (search/book/manage own profile — booking is CUSTOMER-only, enforced server-side via `@Roles(Role.CUSTOMER)` on `POST /reservations`), `MANAGER` (+ checkpoint scanning and slot/lot management for managed lots), `ADMIN` (full: lots/floors/staff/all reservations, policy documents). Enforced via `JwtAuthGuard` + `RolesGuard`/`@Roles()` on REST routes, and via `ToolRegistry.forRole()` for the AI assistant (see AI Assistant section) — both read from the same `Role` enum, so a new role-gated capability needs both the controller guard *and* (if it should be assistant-reachable) a tool registered with matching `roles`.
 
 ## Staff & account lifecycle
 
@@ -151,11 +159,23 @@ Book → check-in (QR scan, slot → OCCUPIED) → cron monitoring (no-show canc
 
 ## API surface
 
-Prefixed by backend base URL; interactive Swagger docs at `/api`. Key resources: `/auth`, `/users` (+ `/me`, `/me/password`, `/me/payment-method`, `/staff`, `/managers/:id`, `/:id`, `/:id/block|unblock`), `/parking-lots` (+ `/nearby`, `/:lotId/floors` — `findAll`/`findOne`/`findNearby` require auth now and filter `isActive` for `CUSTOMER` role), `/parking-slots` (+ `/bulk-status`, `/:id`), `/reservations` (+ `/mine`, `/:id/cancel`, `/:id/checkout-payment/confirm|fail` — `POST /reservations` is CUSTOMER-only), `/checkpoint` (`/check-in`, `/check-out`), `/notifications`. README's API table predates this pass and is out of date for `/users`/`/parking-slots` — trust this file and the source over it until it's refreshed.
+Prefixed by backend base URL; interactive Swagger docs at `/api`. Key resources: `/auth`, `/users` (+ `/me`, `/me/password`, `/me/payment-method`, `/staff`, `/managers/:id`, `/:id`, `/:id/block|unblock`), `/parking-lots` (+ `/nearby`, `/:lotId/floors` — `findAll`/`findOne`/`findNearby` require auth now and filter `isActive` for `CUSTOMER` role), `/parking-slots` (+ `/bulk-status`, `/:id`), `/reservations` (+ `/mine`, `/:id/cancel`, `/:id/checkout-payment/confirm|fail` — `POST /reservations` is CUSTOMER-only), `/checkpoint` (`/check-in`, `/check-out`), `/notifications`, `/policies` (ADMIN only — upload/list/delete policy PDFs), `/assistant/chat` + `/assistant/chat/resume` (SSE — see AI Assistant section below). README's API table predates this pass and is out of date for `/users`/`/parking-slots` — trust this file and the source over it until it's refreshed.
+
+## AI Assistant ("Adam")
+
+An in-app chat assistant (floating bottom-right launcher in `AppShell`, available to every authenticated role) that can do anything the signed-in user is allowed to do via the API, plus answer policy questions.
+
+- **Agent**: `backend/src/modules/assistant/assistant.service.ts` builds a `createReactAgent` (`@langchain/langgraph/prebuilt`) per request, backed by `ChatGoogleGenerativeAI` (model/key from `GEMINI_MODEL`/`GEMINI_API_KEY`). System prompt names the assistant "Adam" and is built per-request with the caller's role/date context.
+- **RBAC**: `ToolRegistry` (`tool-registry.ts`) holds every tool as a plain `{name, schema, roles, mutating, execute}` descriptor (see `tools/*.tools.ts`, one file per domain) and is filtered by the caller's `role` *before* the graph is built — a role's tool list simply doesn't include anything it can't do, so the model has no path to attempt a forbidden action. Every tool's `execute` calls straight into the existing Nest **services** (not HTTP), passing the real `AuthenticatedUser`, so service-level ownership checks (e.g. "manager only manages their own lot") and `AuditService` logging fire exactly as they do for the REST controllers.
+- **Confirm-before-mutate**: any `mutating: true` tool is wrapped with LangGraph's `interrupt()` before it runs, pausing the graph and emitting an SSE `confirmation_required` event; the frontend shows Approve/Cancel; `POST /assistant/chat/resume` resumes via `new Command({ resume: approved })`. Backed by an in-memory `MemorySaver` (module singleton in `AssistantService`) — **not persisted to Postgres**, so history/pending confirmations reset on backend restart. Thread id = the user's own id (one continuous conversation per user, no client-side conversation id).
+- **Streaming**: both endpoints are hand-rolled SSE (`@Res({ passthrough: false })`, manual `res.write`), not Nest's `@Sse()` — event types: `token`, `tool_call`, `tool_result`, `confirmation_required`, `done`, `error`. Frontend parses them with a manual `fetch()` + `ReadableStream` reader (`frontend/src/features/assistant/api.ts`) since the native `EventSource` API can't send a POST body/bearer header.
+- **Security exclusion (deliberate)**: no tool exists for changing password, saving/replacing a payment method, or creating a staff account — those require a raw secret (password, full card number) to transit through the chat/LLM, which the system prompt is instructed to decline and redirect to the relevant Settings/Admin page instead.
+- **Gemini schema gotcha**: Gemini's function-calling schema rejects some JSON-Schema keywords zod emits — notably `exclusiveMinimum` (from zod's `.positive()`). Use `.min(n)` instead of `.positive()` in any tool's zod schema. (`uuid()`, `email()`, `datetime()`, `.min()/.max()`, `.int()`, `enum` are all fine — verified empirically against the live API.)
+- **Policy RAG**: `search_company_policies` tool → `PolicyService.search()` — embeds the query with the same local `EmbeddingService` used for ingestion, brute-force cosine over all `PolicyChunk` rows, top-5 returned as context. Admins upload/manage source PDFs at `/admin/policies` (`POST/GET/DELETE /policies`); only the extracted, chunked text is stored — the original PDF bytes are not persisted.
 
 ## Environment variables
 
-**backend/.env**: `DATABASE_URL`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `PORT`, `FRONTEND_URL`, `MAPS_API_KEY`, `MAPS_API_BASE_URL`, `MAPS_MATRIX_URL`, `RESERVATION_CHECKIN_GRACE_MINUTES`, `CHECKOUT_GRACE_BUFFER_MINUTES`, `CHECKOUT_REMINDER_OFFSET_MINUTES`, `OVERTIME_PENALTY_MULTIPLIER`, `RESERVATION_MAX_ADVANCE_DAYS`.
+**backend/.env**: `DATABASE_URL`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `PORT`, `FRONTEND_URL`, `MAPS_API_KEY`, `MAPS_API_BASE_URL`, `MAPS_MATRIX_URL`, `RESERVATION_CHECKIN_GRACE_MINUTES`, `CHECKOUT_GRACE_BUFFER_MINUTES`, `CHECKOUT_REMINDER_OFFSET_MINUTES`, `OVERTIME_PENALTY_MULTIPLIER`, `RESERVATION_MAX_ADVANCE_DAYS`, `GEMINI_API_KEY`, `GEMINI_MODEL` (AI assistant — see above).
 
 **frontend/.env.local**: `NEXT_PUBLIC_API_URL`.
 
