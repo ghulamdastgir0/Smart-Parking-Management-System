@@ -34,8 +34,16 @@ export function useAssistantChat() {
   );
   const [error, setError] = useState<string | null>(null);
   // Tracks which assistant bubble the current turn's tokens/status lines append to — reset to
-  // null at the start of each turn so every turn gets its own bubble.
+  // null only when a new turn actually starts (see send() below), so a resume mid-turn keeps
+  // appending to the same bubble it paused on rather than starting a new one.
   const activeMessageId = useRef<string | null>(null);
+  // handleEvent needs to kick off a follow-up consume() call when a location_required event
+  // arrives (fetch the device's location, then resume with it) — going through a ref instead of
+  // a direct closure over `consume` avoids making handleEvent and consume mutually dependent in
+  // the useCallback graph below (consume already depends on handleEvent for its for-await loop).
+  const consumeRef = useRef<
+    (streamPromise: Promise<AsyncGenerator<AssistantEvent>>) => Promise<void>
+  >(() => Promise.resolve());
 
   // `update` must be a pure function of the message it's given — this gets passed straight
   // through to a setState updater, which React (in Strict Mode, dev only) invokes twice to
@@ -91,6 +99,14 @@ export function useAssistantChat() {
             args: event.args,
           });
           break;
+        case "location_required":
+          // Adam paused waiting on the device's location — get it and resume automatically
+          // (unlike confirmations, this needs no user click; the "Requesting your location…"
+          // activity line from the preceding tool_call event is the only feedback needed).
+          void assistantApi
+            .fetchLocationNow()
+            .then((coords) => consumeRef.current(assistantApi.resumeLocation(coords)));
+          break;
         case "error":
           setError(event.message);
           break;
@@ -101,9 +117,15 @@ export function useAssistantChat() {
     [appendToActiveMessage],
   );
 
+  // Resetting `activeMessageId` belongs to whoever starts a genuinely *new* turn (send), not to
+  // consume() itself — a resume (confirmation approval, or the location round-trip below) is a
+  // continuation of the turn already in progress, and needs to keep appending to the same bubble
+  // it paused on. Resetting on every consume() call used to break that: the first event after a
+  // resume (typically that same tool's tool_result) would land in a brand-new empty bubble
+  // instead of marking the original "Cancelling…"/"Requesting your location…" line as done,
+  // leaving it spinning forever while the real continuation showed up in a second bubble below.
   const consume = useCallback(
     async (streamPromise: Promise<AsyncGenerator<AssistantEvent>>) => {
-      activeMessageId.current = null;
       setIsStreaming(true);
       setError(null);
       try {
@@ -120,11 +142,13 @@ export function useAssistantChat() {
     },
     [handleEvent],
   );
+  consumeRef.current = consume;
 
   const send = useCallback(
     (message: string) => {
       const trimmed = message.trim();
       if (!trimmed || isStreaming) return;
+      activeMessageId.current = null;
       setMessages((prev) => [
         ...prev,
         { id: nextMessageId(), role: "user", text: trimmed },

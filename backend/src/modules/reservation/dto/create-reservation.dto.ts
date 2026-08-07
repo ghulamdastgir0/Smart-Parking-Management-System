@@ -12,10 +12,10 @@ export class CreateReservationDto {
 
   @ApiProperty({
     example: 120,
-    description: 'Expected parking duration, in minutes (15 min – 7 days)',
+    description: 'Expected parking duration, in minutes (15 min – 24 hours)',
   })
   @IsInt()
   @Min(15)
-  @Max(10080)
+  @Max(1440)
   durationMinutes!: number;
 }

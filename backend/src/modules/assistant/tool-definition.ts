@@ -11,6 +11,12 @@ export interface ToolDefinition {
   roles?: Role[];
   /** mutating tools are wrapped with an interrupt()-based confirmation step before running */
   mutating: boolean;
+  /**
+   * Tools that need the user's device to answer directly (currently just get_user_location) are
+   * resolved entirely through an interrupt()-based round-trip to the client in
+   * AssistantService#toLangChainTool — `execute` is never called for these.
+   */
+  needsLocation?: boolean;
   // Args are validated against `schema` by the LangChain tool wrapper before this ever runs,
   // so re-deriving a precise type here per tool isn't load-bearing — `any` lets each domain
   // file's execute() destructure/pass its args straight into the matching service DTO.

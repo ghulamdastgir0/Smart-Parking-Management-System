@@ -36,14 +36,14 @@ export function buildReservationTools(
     {
       name: 'book_parking_slot',
       description:
-        'Book (reserve) a parking slot for a time window. No payment is collected at booking time. The interval (arrival -> arrival + duration + grace buffer) must not overlap another reservation for the slot.',
+        'Book (reserve) a parking slot for a time window. No payment is collected at booking time. The interval (arrival -> arrival + duration + grace buffer) must not overlap another reservation for the slot. Maximum duration is 24 hours (1440 minutes).',
       schema: z.object({
         slotId: z.string().uuid(),
         arrivalTime: z
           .string()
           .datetime()
           .describe('ISO 8601 arrival date/time'),
-        durationMinutes: z.number().int().min(15).max(10080),
+        durationMinutes: z.number().int().min(15).max(1440),
       }),
       roles: [Role.CUSTOMER],
       mutating: true,

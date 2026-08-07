@@ -9,6 +9,7 @@ import { ReservationService } from '../reservation/reservation.service';
 import { UsersService } from '../users/users.service';
 import { ToolDefinition } from './tool-definition';
 import { buildCheckpointTools } from './tools/checkpoint.tools';
+import { buildLocationTools } from './tools/location.tools';
 import { buildNotificationTools } from './tools/notification.tools';
 import { buildParkingLotTools } from './tools/parking-lot.tools';
 import { buildParkingSlotTools } from './tools/parking-slot.tools';
@@ -40,6 +41,7 @@ export class ToolRegistry {
       ...buildUsersTools(usersService),
       ...buildNotificationTools(notificationService),
       ...buildPolicyTools(policyService),
+      ...buildLocationTools(),
     ];
   }
 

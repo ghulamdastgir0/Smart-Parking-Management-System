@@ -49,20 +49,50 @@ function withIdleTimeout<T>(promise: Promise<T>): Promise<T> {
 }
 
 // Lets Adam answer "find parking near me" directly instead of asking the user to share
-// coordinates. Never blocks/fails the chat send over this: resolves to undefined on missing
-// support, a denied/unavailable permission, or a slow fix — the assistant just falls back to
-// asking for a location itself in that case. `maximumAge` reuses a recent fix instead of hitting
-// the GPS/network on every single message once the user has granted permission once.
-function getCurrentLocation(): Promise<{ latitude: number; longitude: number } | undefined> {
+// coordinates. This must never sit on the critical path of sending a message: on some
+// platforms (e.g. Windows with OS-level Location Services off), `getCurrentPosition` doesn't
+// fail fast — it hangs until its own `timeout` elapses before erroring — which would otherwise
+// add that full delay in front of *every* chat send. So instead of awaiting a live fix per
+// message, we keep a background-refreshed cache and read whatever's already there
+// synchronously; the very first message of a session (before the first fix lands, if ever)
+// just won't have a location yet, same as when it's unavailable entirely — Adam falls back to
+// asking, and subsequent messages pick up the cached fix once it resolves.
+let cachedLocation: { latitude: number; longitude: number } | undefined;
+let locationRequestInFlight = false;
+
+function refreshLocationInBackground(): void {
+  if (locationRequestInFlight) return;
+  if (typeof navigator === "undefined" || !("geolocation" in navigator)) return;
+  locationRequestInFlight = true;
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      cachedLocation = { latitude: position.coords.latitude, longitude: position.coords.longitude };
+      locationRequestInFlight = false;
+    },
+    () => {
+      locationRequestInFlight = false;
+    },
+    { timeout: 10_000, maximumAge: 5 * 60 * 1000 },
+  );
+}
+
+// Used when Adam explicitly calls get_user_location and the graph is paused waiting on an
+// answer — unlike the background refresh above, it's fine (expected, even) for this one to take
+// a moment: the panel shows a spinner on the "Requesting your location…" activity line for the
+// duration, so there's a visible reason to wait, rather than every message silently stalling.
+function fetchLocationNow(): Promise<{ latitude: number; longitude: number } | null> {
   if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
-    return Promise.resolve(undefined);
+    return Promise.resolve(null);
   }
   return new Promise((resolve) => {
     navigator.geolocation.getCurrentPosition(
-      (position) =>
-        resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
-      () => resolve(undefined),
-      { timeout: 4000, maximumAge: 5 * 60 * 1000 },
+      (position) => {
+        const coords = { latitude: position.coords.latitude, longitude: position.coords.longitude };
+        cachedLocation = coords; // keep the passive cache warm too
+        resolve(coords);
+      },
+      () => resolve(null),
+      { timeout: 10_000, maximumAge: 5 * 60 * 1000 },
     );
   });
 }
@@ -83,16 +113,30 @@ async function postForSse(path: string, body: unknown): Promise<AsyncGenerator<A
   return parseSseStream(response);
 }
 
+// Resuming rebuilds the agent's system prompt from scratch server-side (see
+// AssistantService#buildGraph) — without resending it, the prompt falls back to "timezone
+// unknown" partway through a turn that already established it via the original chat message.
+function currentTimezone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
 export const assistantApi = {
   // Timezone lets Adam convert clock times the user mentions ("8pm") to the correct UTC instant
   // instead of assuming UTC. Location lets it answer "find parking near me" without asking.
-  chat: async (message: string) => {
-    const location = await getCurrentLocation();
+  chat: (message: string) => {
+    refreshLocationInBackground(); // fire-and-forget — keeps the cache warm for next time
     return postForSse("/assistant/chat", {
       message,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      ...(location && { latitude: location.latitude, longitude: location.longitude }),
+      timezone: currentTimezone(),
+      ...(cachedLocation && { latitude: cachedLocation.latitude, longitude: cachedLocation.longitude }),
     });
   },
-  resume: (approved: boolean) => postForSse("/assistant/chat/resume", { approved }),
+  resume: (approved: boolean) =>
+    postForSse("/assistant/chat/resume", { approved, timezone: currentTimezone() }),
+  // Answers a pending get_user_location interrupt. `coords` is null when the user declined,
+  // geolocation isn't supported, or the fix failed/timed out — sent as an empty body (plus
+  // timezone) so the backend resumes with `null` rather than a stale/garbage coordinate pair.
+  resumeLocation: (coords: { latitude: number; longitude: number } | null) =>
+    postForSse("/assistant/chat/resume", { ...coords, timezone: currentTimezone() }),
+  fetchLocationNow,
 };

@@ -22,6 +22,10 @@ export interface AssistantConfirmationEvent {
   args: unknown;
 }
 
+export interface AssistantLocationRequiredEvent {
+  type: "location_required";
+}
+
 export interface AssistantDoneEvent {
   type: "done";
 }
@@ -36,6 +40,7 @@ export type AssistantEvent =
   | AssistantToolCallEvent
   | AssistantToolResultEvent
   | AssistantConfirmationEvent
+  | AssistantLocationRequiredEvent
   | AssistantDoneEvent
   | AssistantErrorEvent;
 

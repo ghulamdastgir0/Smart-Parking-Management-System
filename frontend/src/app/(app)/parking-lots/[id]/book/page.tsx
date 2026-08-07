@@ -41,7 +41,7 @@ import { formatCurrency, formatDuration } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { CreateReservationResponse } from "@/features/reservations/types";
 
-const DURATION_PRESETS = [30, 60, 120, 180, 240, 360, 480, 720, 1440, 2880, 4320, 10080];
+const DURATION_PRESETS = [30, 60, 120, 180, 240, 360, 480, 720, 1440];
 
 // Reservations can only be made for today or tomorrow — mirrors the backend's
 // RESERVATION_MAX_ADVANCE_DAYS check in reservation.service.ts (default 2).
@@ -58,7 +58,7 @@ const detailsSchema = z
   .object({
     date: z.string().min(1, "Arrival date is required"),
     time: z.string().min(1, "Arrival time is required"),
-    durationMinutes: z.number().min(15).max(10080),
+    durationMinutes: z.number().min(15).max(1440),
   })
   .refine(
     (data) => {

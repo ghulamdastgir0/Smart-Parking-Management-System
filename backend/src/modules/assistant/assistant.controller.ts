@@ -3,7 +3,12 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
-import { AssistantEvent, AssistantService } from './assistant.service';
+import {
+  AssistantEvent,
+  AssistantService,
+  ChatContext,
+  ResumeValue,
+} from './assistant.service';
 import { ChatMessageDto } from './dto/chat-message.dto';
 import { ResumeChatDto } from './dto/resume-chat.dto';
 
@@ -42,7 +47,7 @@ export class AssistantController {
   @Post('chat/resume')
   @ApiOperation({
     summary:
-      'Approve or reject a pending mutating action proposed by the assistant',
+      'Answer a pending interrupt: approve/reject a mutating action, or answer a location request',
     description:
       'Streamed as Server-Sent Events, same event shape as POST /assistant/chat.',
   })
@@ -52,10 +57,19 @@ export class AssistantController {
     @Res({ passthrough: false }) res: Response,
   ): Promise<void> {
     const user = req.user as AuthenticatedUser;
-    await this.pipeToSse(
-      res,
-      this.assistantService.resumeChat(user, dto.approved),
-    );
+    const hasCoords = dto.latitude !== undefined && dto.longitude !== undefined;
+    const resumeValue: ResumeValue = hasCoords
+      ? { latitude: dto.latitude!, longitude: dto.longitude! }
+      : (dto.approved ?? null);
+    // Rebuilding the agent's system prompt on resume (see AssistantService#buildGraph) would
+    // otherwise silently drop the timezone/location the original message provided — resending
+    // them here keeps the prompt consistent for the rest of the turn. When this resume *is* the
+    // location answer, those same coordinates double as the location context too.
+    const context: ChatContext = {
+      timezone: dto.timezone,
+      location: hasCoords ? { latitude: dto.latitude!, longitude: dto.longitude! } : undefined,
+    };
+    await this.pipeToSse(res, this.assistantService.resumeChat(user, resumeValue, context));
   }
 
   private async pipeToSse(

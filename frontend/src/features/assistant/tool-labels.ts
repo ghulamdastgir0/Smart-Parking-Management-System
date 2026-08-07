@@ -32,6 +32,7 @@ const TOOL_LABELS: Record<string, string> = {
   list_my_notifications: "Loading notifications…",
   mark_notifications_read: "Marking notifications as read…",
   search_company_policies: "Checking company policies…",
+  get_user_location: "Requesting your location…",
 };
 
 export function describeToolCall(name: string): string {
