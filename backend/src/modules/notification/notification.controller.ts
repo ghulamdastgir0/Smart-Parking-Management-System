@@ -44,7 +44,9 @@ export class NotificationController {
 
   @Patch('mine/read')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: "Mark all of the authenticated user's notifications as read" })
+  @ApiOperation({
+    summary: "Mark all of the authenticated user's notifications as read",
+  })
   @ApiResponse({ status: 204, description: 'Notifications marked read' })
   markAllRead(@Req() req: Request): Promise<void> {
     const user = req.user as AuthenticatedUser;

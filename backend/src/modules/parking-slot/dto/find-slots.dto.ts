@@ -44,7 +44,8 @@ export class FindSlotsDto {
 
   @ApiPropertyOptional({
     example: 120,
-    description: 'Desired parking duration in minutes, paired with arrivalTime.',
+    description:
+      'Desired parking duration in minutes, paired with arrivalTime.',
   })
   @IsOptional()
   @Type(() => Number)

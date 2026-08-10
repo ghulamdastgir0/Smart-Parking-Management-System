@@ -25,7 +25,7 @@ export class CheckOutResponseDto {
   @ApiProperty({
     type: PaymentResponseDto,
     description:
-      'Result of charging the customer\'s saved payment method for the final amount ' +
+      "Result of charging the customer's saved payment method for the final amount " +
       '(base charge + extension/overtime challans).',
   })
   payment!: PaymentResponseDto;

@@ -67,9 +67,14 @@ export class AssistantController {
     // location answer, those same coordinates double as the location context too.
     const context: ChatContext = {
       timezone: dto.timezone,
-      location: hasCoords ? { latitude: dto.latitude!, longitude: dto.longitude! } : undefined,
+      location: hasCoords
+        ? { latitude: dto.latitude!, longitude: dto.longitude! }
+        : undefined,
     };
-    await this.pipeToSse(res, this.assistantService.resumeChat(user, resumeValue, context));
+    await this.pipeToSse(
+      res,
+      this.assistantService.resumeChat(user, resumeValue, context),
+    );
   }
 
   private async pipeToSse(

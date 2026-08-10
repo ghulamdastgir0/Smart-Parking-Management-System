@@ -96,7 +96,11 @@ export class AssistantService {
     return this.consumeStream(
       graph.stream(
         { messages: [{ role: 'user', content: message }] },
-        { ...config, streamMode: STREAM_MODES, recursionLimit: GRAPH_RECURSION_LIMIT },
+        {
+          ...config,
+          streamMode: STREAM_MODES,
+          recursionLimit: GRAPH_RECURSION_LIMIT,
+        },
       ),
     );
   }
@@ -125,9 +129,9 @@ export class AssistantService {
   ): AsyncGenerator<AssistantEvent> {
     try {
       const stream = await streamPromise;
-      const iterator = (
-        stream as AsyncIterable<[string, unknown]>
-      )[Symbol.asyncIterator]();
+      const iterator = (stream as AsyncIterable<[string, unknown]>)[
+        Symbol.asyncIterator
+      ]();
       // Race each individual chunk against the idle timeout (not the whole loop) so a
       // legitimately long multi-tool-call turn isn't cut off, but a single stalled step is.
       while (true) {
@@ -170,7 +174,7 @@ export class AssistantService {
       return 'Adam is getting more requests than the API plan allows right now. Please wait a bit and try again.';
     }
     if (/recursion limit/i.test(message)) {
-      return "That request needed more steps than Adam allows in one go. Try rephrasing it more specifically.";
+      return 'That request needed more steps than Adam allows in one go. Try rephrasing it more specifically.';
     }
     return 'Something went wrong. Please try again.';
   }
@@ -275,7 +279,7 @@ export class AssistantService {
             kind: 'location',
           });
           if (!location) {
-            return 'The user\'s location is unavailable (declined, unsupported, or failed). Ask them to name a place or a specific parking lot instead — do not call get_user_location again this turn.';
+            return "The user's location is unavailable (declined, unsupported, or failed). Ask them to name a place or a specific parking lot instead — do not call get_user_location again this turn.";
           }
           return JSON.stringify(location);
         }
@@ -289,7 +293,10 @@ export class AssistantService {
     );
   }
 
-  private buildSystemPrompt(user: AuthenticatedUser, context?: ChatContext): string {
+  private buildSystemPrompt(
+    user: AuthenticatedUser,
+    context?: ChatContext,
+  ): string {
     const now = new Date();
     const timezone = context?.timezone;
     const timezoneNote = timezone
@@ -299,7 +306,7 @@ export class AssistantService {
     const location = context?.location;
     const locationNote = location
       ? `The user's current approximate device location is latitude ${location.latitude}, longitude ${location.longitude}. For "near me"/"nearby" requests, use this directly with find_nearby_parking_lots instead of asking them to share coordinates — only ask if they mention a different place than where they currently are.`
-      : "The user's location has not already been provided. For \"near me\"/\"nearby\" requests, call get_user_location first to ask their device directly rather than asking them to type coordinates — only fall back to asking them to name a place or a specific parking lot if get_user_location comes back unavailable (declined, unsupported, or failed). Call get_user_location at most once per turn; never guess coordinates yourself.";
+      : 'The user\'s location has not already been provided. For "near me"/"nearby" requests, call get_user_location first to ask their device directly rather than asking them to type coordinates — only fall back to asking them to name a place or a specific parking lot if get_user_location comes back unavailable (declined, unsupported, or failed). Call get_user_location at most once per turn; never guess coordinates yourself.';
 
     return `You are Adam, the AI Assistant for the Smart Parking Management System (SPMS).
 

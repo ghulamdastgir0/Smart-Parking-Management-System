@@ -34,7 +34,7 @@ export class ChatMessageDto {
   @ApiPropertyOptional({
     example: 31.5204,
     description:
-      "User's current browser geolocation (if granted) — lets Adam answer \"find parking near me\" " +
+      'User\'s current browser geolocation (if granted) — lets Adam answer "find parking near me" ' +
       'style requests directly via find_nearby_parking_lots instead of asking the user to share coordinates.',
   })
   @IsOptional()

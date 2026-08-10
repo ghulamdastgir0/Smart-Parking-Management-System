@@ -1,6 +1,13 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsIn, IsLatitude, IsLongitude, IsOptional, IsString } from 'class-validator';
+import {
+  IsBoolean,
+  IsIn,
+  IsLatitude,
+  IsLongitude,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 // Node's own IANA tz database — no need for a separate package.
 const VALID_TIMEZONES = Intl.supportedValuesOf('timeZone');
@@ -19,7 +26,8 @@ export class ResumeChatDto {
 
   @ApiPropertyOptional({
     example: 31.5204,
-    description: "User's latitude, answering a pending get_user_location request",
+    description:
+      "User's latitude, answering a pending get_user_location request",
   })
   @IsOptional()
   @Type(() => Number)

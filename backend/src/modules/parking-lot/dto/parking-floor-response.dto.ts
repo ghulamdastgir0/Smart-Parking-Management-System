@@ -22,6 +22,8 @@ export class ParkingFloorResponseDto {
   @ApiProperty({ description: 'rows × columns' })
   totalSlots!: number;
 
-  @ApiProperty({ description: 'Count of currently AVAILABLE slots on this floor' })
+  @ApiProperty({
+    description: 'Count of currently AVAILABLE slots on this floor',
+  })
   availableSlots!: number;
 }
