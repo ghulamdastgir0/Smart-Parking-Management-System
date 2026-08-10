@@ -28,6 +28,7 @@ import { calculateBaseCharge } from './billing.util';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 
 export const DEFAULT_CHECKIN_GRACE_MINUTES = 60;
+export const DEFAULT_CHECKIN_EARLY_MINUTES = 15;
 export const DEFAULT_CHECKOUT_BUFFER_MINUTES = 30;
 // 2 = today and tomorrow only.
 export const DEFAULT_MAX_ADVANCE_DAYS = 2;

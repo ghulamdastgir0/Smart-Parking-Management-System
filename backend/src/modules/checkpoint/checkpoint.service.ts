@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   NotificationRecipientRole,
   Payment,
@@ -24,6 +25,7 @@ import { toQrCodeImage } from '../../common/qr/qr.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BillingService } from '../reservation/billing.service';
 import { ChallanResponseDto } from '../reservation/dto/reservation-response.dto';
+import { DEFAULT_CHECKIN_EARLY_MINUTES } from '../reservation/reservation.service';
 
 type QrCodeWithReservation = QrCode & { reservation: Reservation };
 
@@ -44,7 +46,15 @@ export class CheckpointService {
     private readonly notificationService: NotificationService,
     private readonly billingService: BillingService,
     private readonly realtimeGateway: RealtimeGateway,
+    private readonly configService: ConfigService,
   ) {}
+
+  private getCheckinEarlyMinutes(): number {
+    return this.configService.get<number>(
+      'RESERVATION_CHECKIN_EARLY_MINUTES',
+      DEFAULT_CHECKIN_EARLY_MINUTES,
+    );
+  }
 
   async checkIn(
     token: string,
@@ -61,6 +71,16 @@ export class CheckpointService {
       if (reservation.status !== ReservationStatus.CONFIRMED) {
         throw new ConflictException(
           `Reservation is not confirmed for check-in (current status: ${reservation.status})`,
+        );
+      }
+
+      const earlyMinutes = this.getCheckinEarlyMinutes();
+      const checkinOpensAt = new Date(
+        reservation.startTime.getTime() - earlyMinutes * 60_000,
+      );
+      if (new Date() < checkinOpensAt) {
+        throw new BadRequestException(
+          `Too early to check in — this reservation's arrival window opens at ${checkinOpensAt.toISOString()}.`,
         );
       }
 
@@ -117,10 +137,14 @@ export class CheckpointService {
 
     // Emitted after the transaction commits, not from inside it — the customer's client
     // would otherwise be able to react and re-fetch over REST before the write is visible.
-    this.realtimeGateway.emitToUser(result.reservation.userId, 'reservation:updated', {
-      reservationId: result.reservation.id,
-      event: 'check-in',
-    });
+    this.realtimeGateway.emitToUser(
+      result.reservation.userId,
+      'reservation:updated',
+      {
+        reservationId: result.reservation.id,
+        event: 'check-in',
+      },
+    );
 
     return result;
   }
@@ -232,19 +256,18 @@ export class CheckpointService {
           tx,
         );
 
-        const reservationWithDetails = await tx.reservation.findUniqueOrThrow(
-          {
-            where: { id: reservation.id },
-            include: RESERVATION_LOT_SLOT_FLOOR_INCLUDE,
-          },
-        );
+        const reservationWithDetails = await tx.reservation.findUniqueOrThrow({
+          where: { id: reservation.id },
+          include: RESERVATION_LOT_SLOT_FLOOR_INCLUDE,
+        });
 
         return {
           reservation: reservationWithDetails,
           payment,
           challans: challanDtos,
           paymentFailed: true,
-          message: 'Payment declined — ask the customer to rescan this QR code to retry.',
+          message:
+            'Payment declined — ask the customer to rescan this QR code to retry.',
         };
       }
 
@@ -293,7 +316,8 @@ export class CheckpointService {
           recipientRole: NotificationRecipientRole.USER,
           type: 'CHECKOUT_SUCCESS',
           title: 'Checkout complete',
-          message: 'You have successfully checked out. Thanks for parking with us!',
+          message:
+            'You have successfully checked out. Thanks for parking with us!',
           reservationId: reservation.id,
         },
         tx,
@@ -325,10 +349,14 @@ export class CheckpointService {
       };
     });
 
-    this.realtimeGateway.emitToUser(result.reservation.userId, 'reservation:updated', {
-      reservationId: result.reservation.id,
-      event: result.paymentFailed ? 'checkout-payment-declined' : 'check-out',
-    });
+    this.realtimeGateway.emitToUser(
+      result.reservation.userId,
+      'reservation:updated',
+      {
+        reservationId: result.reservation.id,
+        event: result.paymentFailed ? 'checkout-payment-declined' : 'check-out',
+      },
+    );
 
     return result;
   }
