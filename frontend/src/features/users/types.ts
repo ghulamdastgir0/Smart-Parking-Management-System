@@ -16,6 +16,10 @@ export interface UpdateProfilePayload {
   email?: string;
 }
 
+export interface UpdateStaffRolePayload {
+  role: "MANAGER" | "ADMIN";
+}
+
 export interface CreateStaffPayload {
   firstName: string;
   lastName: string;

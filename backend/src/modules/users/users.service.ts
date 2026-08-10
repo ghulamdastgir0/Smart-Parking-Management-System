@@ -22,6 +22,7 @@ import { CreateStaffDto } from './dto/create-staff.dto';
 import { PaymentMethodResponseDto } from './dto/payment-method-response.dto';
 import { SavePaymentMethodDto } from './dto/save-payment-method.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { UpdateStaffRoleDto } from './dto/update-staff-role.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 
 const SALT_ROUNDS = 10;
@@ -260,6 +261,36 @@ export class UsersService {
       entityType: 'User',
       entityId: userId,
       action: 'PROFILE_UPDATED_BY_ADMIN',
+      userId: requestingUserId,
+    });
+
+    return toUserResponse(user);
+  }
+
+  async updateStaffRole(
+    id: string,
+    dto: UpdateStaffRoleDto,
+    requestingUserId: string,
+  ): Promise<UserResponseDto> {
+    if (id === requestingUserId) {
+      throw new BadRequestException('You cannot change your own role');
+    }
+
+    const target = await this.findOne(id);
+    if (target.role !== Role.MANAGER && target.role !== Role.ADMIN) {
+      throw new BadRequestException('Target is not a manager or admin account');
+    }
+
+    const user = await this.prisma.user.update({
+      where: { id },
+      data: { role: dto.role },
+      select: SAFE_USER_SELECT,
+    });
+
+    await this.auditService.log({
+      entityType: 'User',
+      entityId: id,
+      action: 'ROLE_CHANGED',
       userId: requestingUserId,
     });
 

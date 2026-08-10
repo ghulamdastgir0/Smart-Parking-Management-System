@@ -9,6 +9,7 @@ import type {
   CreateStaffPayload,
   SavePaymentMethodPayload,
   UpdateProfilePayload,
+  UpdateStaffRolePayload,
 } from "./types";
 
 export function useAdminUsers() {
@@ -73,6 +74,19 @@ export function useUpdateUser() {
       usersApi.updateUser(id, payload),
     onSuccess: () => {
       toast.success("User updated");
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error)),
+  });
+}
+
+export function useUpdateStaffRole() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: UpdateStaffRolePayload }) =>
+      usersApi.updateStaffRole(id, payload),
+    onSuccess: () => {
+      toast.success("Role updated");
       queryClient.invalidateQueries({ queryKey: ["users"] });
     },
     onError: (error) => toast.error(getApiErrorMessage(error)),

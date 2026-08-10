@@ -25,6 +25,13 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -44,6 +51,7 @@ import {
   useBlockUser,
   useRemoveManager,
   useUnblockUser,
+  useUpdateStaffRole,
   useUpdateUser,
 } from "@/features/users/hooks";
 import type { AdminUser } from "@/features/users/types";
@@ -55,6 +63,7 @@ const editStaffSchema = z.object({
   firstName: nameField("First name"),
   lastName: nameField("Last name"),
   email: emailField,
+  role: z.enum(["MANAGER", "ADMIN"]),
 });
 
 type EditStaffValues = z.infer<typeof editStaffSchema>;
@@ -69,12 +78,15 @@ function EditStaffDialog({
   // Remounted per-staff-member via `key` on the call site, so these lazy initial values are
   // always fresh — no effect needed to re-sync them when a different row is clicked.
   const updateUser = useUpdateUser();
+  const updateStaffRole = useUpdateStaffRole();
+  const isSaving = updateUser.isPending || updateStaffRole.isPending;
   const form = useForm<EditStaffValues>({
     resolver: zodResolver(editStaffSchema),
     defaultValues: {
       firstName: staff?.firstName ?? "",
       lastName: staff?.lastName ?? "",
       email: staff?.email ?? "",
+      role: staff?.role === "ADMIN" ? "ADMIN" : "MANAGER",
     },
     mode: "onBlur",
   });
@@ -83,10 +95,20 @@ function EditStaffDialog({
 
   function onSubmit(values: EditStaffValues) {
     if (!staff) return;
+    const { role, ...profile } = values;
     updateUser.mutate(
-      { id: staff.id, payload: values },
+      { id: staff.id, payload: profile },
       {
-        onSuccess: () => onOpenChange(false),
+        onSuccess: () => {
+          if (role === staff.role) {
+            onOpenChange(false);
+            return;
+          }
+          updateStaffRole.mutate(
+            { id: staff.id, payload: { role } },
+            { onSuccess: () => onOpenChange(false) },
+          );
+        },
         onError: (error) => setServerFieldError(form, error, "email"),
       },
     );
@@ -142,12 +164,33 @@ function EditStaffDialog({
                 </FormItem>
               )}
             />
+            <FormField
+              control={form.control}
+              name="role"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Role</FormLabel>
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <FormControl>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="MANAGER">Manager</SelectItem>
+                      <SelectItem value="ADMIN">Admin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={updateUser.isPending}>
-                {updateUser.isPending ? "Saving…" : "Save Changes"}
+              <Button type="submit" disabled={isSaving}>
+                {isSaving ? "Saving…" : "Save Changes"}
               </Button>
             </DialogFooter>
           </form>

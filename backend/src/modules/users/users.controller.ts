@@ -29,6 +29,7 @@ import { CreateStaffDto } from './dto/create-staff.dto';
 import { PaymentMethodResponseDto } from './dto/payment-method-response.dto';
 import { SavePaymentMethodDto } from './dto/save-payment-method.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { UpdateStaffRoleDto } from './dto/update-staff-role.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { UsersService } from './users.service';
 
@@ -209,6 +210,27 @@ export class UsersController {
   ): Promise<UserResponseDto> {
     const admin = req.user as AuthenticatedUser;
     return this.usersService.adminUpdateProfile(id, dto, admin.userId);
+  }
+
+  @Patch(':id/role')
+  @Roles(Role.ADMIN)
+  @ApiOperation({
+    summary: "Change a manager or admin's role (Admin only)",
+    description:
+      'Switches an existing staff account between MANAGER and ADMIN. Target must already ' +
+      'be a manager or admin — this does not promote a customer to staff (use POST ' +
+      '/users/staff for that).',
+  })
+  @ApiResponse({ status: 200, description: 'Role changed', type: UserResponseDto })
+  @ApiResponse({ status: 400, description: "Cannot change your own role, or target isn't staff" })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  updateRole(
+    @Param('id') id: string,
+    @Body() dto: UpdateStaffRoleDto,
+    @Req() req: Request,
+  ): Promise<UserResponseDto> {
+    const admin = req.user as AuthenticatedUser;
+    return this.usersService.updateStaffRole(id, dto, admin.userId);
   }
 
   @Patch(':id/block')

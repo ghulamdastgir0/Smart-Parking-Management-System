@@ -6,6 +6,7 @@ import type {
   PaymentMethod,
   SavePaymentMethodPayload,
   UpdateProfilePayload,
+  UpdateStaffRolePayload,
 } from "./types";
 
 export const usersApi = {
@@ -25,6 +26,9 @@ export const usersApi = {
 
   updateUser: (id: string, payload: UpdateProfilePayload) =>
     apiClient.patch<AdminUser>(`/users/${id}`, payload).then((res) => res.data),
+
+  updateStaffRole: (id: string, payload: UpdateStaffRolePayload) =>
+    apiClient.patch<AdminUser>(`/users/${id}/role`, payload).then((res) => res.data),
 
   updateProfile: (payload: UpdateProfilePayload) =>
     apiClient.patch<AdminUser>("/users/me", payload).then((res) => res.data),
