@@ -14,9 +14,14 @@ export class EmbeddingService {
 
   private async getPipeline(): Promise<FeatureExtractionPipeline> {
     if (!this.pipelinePromise) {
-      this.pipelinePromise = import('@huggingface/transformers').then(
-        ({ pipeline }) => pipeline('feature-extraction', MODEL_ID),
-      );
+      this.pipelinePromise = import('@huggingface/transformers').then(({ env, pipeline }) => {
+        // Defaults to caching inside its own node_modules folder, which is root-owned in the
+        // production image (npm ci runs as root before USER node) — writing there as the
+        // non-root runtime user fails with EACCES on first use. Dockerfile creates this
+        // directory and chowns it to `node` before switching users.
+        env.cacheDir = '/app/.cache/huggingface/';
+        return pipeline('feature-extraction', MODEL_ID);
+      });
     }
     return this.pipelinePromise;
   }

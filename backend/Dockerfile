@@ -28,6 +28,10 @@ COPY --from=build --chown=node:node /app/prisma ./prisma
 COPY --from=build --chown=node:node /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=build --chown=node:node /app/dist ./dist
 
+# @huggingface/transformers caches downloaded model weights here (see embedding.service.ts) —
+# needs to exist and be writable by the non-root runtime user ahead of time.
+RUN mkdir -p /app/.cache/huggingface && chown -R node:node /app/.cache
+
 USER node
 
 # Cloud Run injects PORT; main.ts already reads process.env.PORT and binds 0.0.0.0
