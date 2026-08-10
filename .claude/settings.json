@@ -30,7 +30,8 @@
       "Bash(node \"/c/Users/ADMINI~1/AppData/Local/Temp/claude/e--Smart-Parking-Management-System/f368cf23-038d-4f7c-b27b-9e2e1c54c5b3/scratchpad/test-embedding.mjs\")",
       "Bash(node test-embedding.mjs)",
       "Bash(git stash *)",
-      "Bash(npx eslint *)"
+      "Bash(npx eslint *)",
+      "Bash(DATABASE_URL=\"postgresql://postgres.wrzzmilsddzxykoyqbjz:Gdastgir1234@aws-0-ap-south-1.pooler.supabase.com:5432/postgres\" npx prisma migrate deploy)"
     ]
   }
 }

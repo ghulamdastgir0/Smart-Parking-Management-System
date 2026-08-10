@@ -50,7 +50,7 @@ import {
 } from "@/features/parking-lots/hooks";
 import type { ParkingFloor } from "@/features/parking-lots/types";
 import {
-  editFloorSchema,
+  buildEditFloorSchema,
   floorSchema,
   type EditFloorFormValues,
   type FloorFormValues,
@@ -58,7 +58,17 @@ import {
 import { useAdminUsers } from "@/features/users/hooks";
 import { reverseGeocode } from "@/lib/geocode";
 
-function AddFloorForm({ lotId, nextFloorNumber }: { lotId: string; nextFloorNumber: number }) {
+function AddFloorDialog({
+  lotId,
+  nextFloorNumber,
+  open,
+  onOpenChange,
+}: {
+  lotId: string;
+  nextFloorNumber: number;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const createFloor = useCreateFloor(lotId);
   const form = useForm<FloorFormValues>({
     resolver: zodResolver(floorSchema),
@@ -72,104 +82,129 @@ function AddFloorForm({ lotId, nextFloorNumber }: { lotId: string; nextFloorNumb
     mode: "onBlur",
   });
 
+  useEffect(() => {
+    if (!open) return;
+    // Reset to fresh defaults (incl. the next available floor number) each time it's opened.
+    form.reset({
+      name: `Floor ${nextFloorNumber}`,
+      floorNumber: nextFloorNumber,
+      rows: 5,
+      columns: 10,
+      defaultSlotPrice: 5,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, nextFloorNumber]);
+
   function onSubmit(values: FloorFormValues) {
-    createFloor.mutate(values, { onSuccess: () => form.reset() });
+    createFloor.mutate(values, { onSuccess: () => onOpenChange(false) });
   }
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-xs">Name</FormLabel>
-                <FormControl>
-                  <Input {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="floorNumber"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-xs">Floor #</FormLabel>
-                <FormControl>
-                  <Input
-                    type="number"
-                    {...field}
-                    onChange={(e) => field.onChange(Number(e.target.value))}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          <FormField
-            control={form.control}
-            name="rows"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-xs">Rows</FormLabel>
-                <FormControl>
-                  <Input
-                    type="number"
-                    {...field}
-                    onChange={(e) => field.onChange(Number(e.target.value))}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="columns"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-xs">Columns</FormLabel>
-                <FormControl>
-                  <Input
-                    type="number"
-                    {...field}
-                    onChange={(e) => field.onChange(Number(e.target.value))}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="defaultSlotPrice"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-xs">Rate ($/hr)</FormLabel>
-                <FormControl>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    {...field}
-                    onChange={(e) => field.onChange(Number(e.target.value))}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-        <Button type="submit" size="sm" disabled={createFloor.isPending}>
-          <Plus className="size-3.5" /> {createFloor.isPending ? "Adding…" : "Add Floor"}
-        </Button>
-      </form>
-    </Form>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add a floor</DialogTitle>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs">Name</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="floorNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs">Floor #</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        {...field}
+                        onChange={(e) => field.onChange(Number(e.target.value))}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <FormField
+                control={form.control}
+                name="rows"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs">Rows</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        {...field}
+                        onChange={(e) => field.onChange(Number(e.target.value))}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="columns"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs">Columns</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        {...field}
+                        onChange={(e) => field.onChange(Number(e.target.value))}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="defaultSlotPrice"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs">Rate ($/hr)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        {...field}
+                        onChange={(e) => field.onChange(Number(e.target.value))}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={createFloor.isPending}>
+                {createFloor.isPending ? "Adding…" : "Add Floor"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -186,14 +221,26 @@ function EditFloorDialog({
 }) {
   const updateFloor = useUpdateFloor(lotId);
   const form = useForm<EditFloorFormValues>({
-    resolver: zodResolver(editFloorSchema),
-    defaultValues: { name: floor.name, floorNumber: floor.floorNumber },
+    resolver: zodResolver(buildEditFloorSchema(floor.rows, floor.columns)),
+    defaultValues: {
+      name: floor.name,
+      floorNumber: floor.floorNumber,
+      rows: floor.rows,
+      columns: floor.columns,
+      defaultSlotPrice: undefined,
+    },
     mode: "onBlur",
   });
 
   useEffect(() => {
     // Sync the form when a different floor is opened for editing.
-    form.reset({ name: floor.name, floorNumber: floor.floorNumber });
+    form.reset({
+      name: floor.name,
+      floorNumber: floor.floorNumber,
+      rows: floor.rows,
+      columns: floor.columns,
+      defaultSlotPrice: undefined,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [floor]);
 
@@ -212,36 +259,100 @@ function EditFloorDialog({
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-xs">Name</FormLabel>
-                  <FormControl>
-                    <Input {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="floorNumber"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-xs">Floor #</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      {...field}
-                      onChange={(e) => field.onChange(Number(e.target.value))}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="grid grid-cols-2 gap-3">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs">Name</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="floorNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs">Floor #</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        {...field}
+                        onChange={(e) => field.onChange(Number(e.target.value))}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <FormField
+                control={form.control}
+                name="rows"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs">Rows</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        {...field}
+                        onChange={(e) => field.onChange(Number(e.target.value))}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="columns"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs">Columns</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        {...field}
+                        onChange={(e) => field.onChange(Number(e.target.value))}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="defaultSlotPrice"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs">Rate ($/hr)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="Keep current"
+                        value={field.value ?? ""}
+                        onChange={(e) =>
+                          field.onChange(e.target.value === "" ? undefined : Number(e.target.value))
+                        }
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Shrinking rows/columns removes the slots outside the new grid and fails if any of
+              them has a reservation. Leave rate blank to keep each slot&apos;s current price
+              unless you&apos;re growing the grid, which requires one for the new slots.
+            </p>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
@@ -293,6 +404,8 @@ export default function EditParkingLotPage({
   const [position, setPosition] = useState<[number, number] | null>(null);
   const [editingFloor, setEditingFloor] = useState<ParkingFloor | null>(null);
   const [deletingFloor, setDeletingFloor] = useState<ParkingFloor | null>(null);
+  const [addFloorOpen, setAddFloorOpen] = useState(false);
+  const nextFloorNumber = Math.max(-1, ...(floors?.map((f) => f.floorNumber) ?? [-1])) + 1;
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -444,7 +557,12 @@ export default function EditParkingLotPage({
 
       <Card className="mt-6">
         <CardContent className="space-y-4">
-          <h2 className="font-heading font-medium">Floors</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="font-heading font-medium">Floors</h2>
+            <Button size="sm" onClick={() => setAddFloorOpen(true)}>
+              <Plus className="size-3.5" /> Add Floor
+            </Button>
+          </div>
           <div className="space-y-2">
             {floors?.map((floor) => (
               <div
@@ -482,17 +600,15 @@ export default function EditParkingLotPage({
               </div>
             ))}
           </div>
-          <div className="border-t border-border pt-4">
-            <p className="mb-3 text-sm font-medium">Add a floor</p>
-            <AddFloorForm
-              lotId={id}
-              nextFloorNumber={
-                Math.max(-1, ...(floors?.map((f) => f.floorNumber) ?? [-1])) + 1
-              }
-            />
-          </div>
         </CardContent>
       </Card>
+
+      <AddFloorDialog
+        lotId={id}
+        nextFloorNumber={nextFloorNumber}
+        open={addFloorOpen}
+        onOpenChange={setAddFloorOpen}
+      />
 
       {editingFloor && (
         <EditFloorDialog

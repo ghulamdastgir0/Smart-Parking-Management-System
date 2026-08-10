@@ -228,18 +228,90 @@ export class ParkingLotService {
     await this.assertManagerOwnsLot(lotId, requestingUser);
     const floor = await this.assertFloorBelongsToLot(lotId, floorId);
 
-    try {
-      const updated = await this.prisma.parkingFloor.update({
-        where: { id: floor.id },
-        data: dto,
-      });
+    const newRows = dto.rows ?? floor.rows;
+    const newColumns = dto.columns ?? floor.columns;
+    const isResizing = newRows !== floor.rows || newColumns !== floor.columns;
 
-      await this.auditService.log({
-        entityType: 'ParkingFloor',
-        entityId: updated.id,
-        action: 'PARKING_FLOOR_UPDATED',
-        userId: requestingUser.userId,
-        metadata: { lotId, ...dto },
+    if (isResizing) {
+      const totalSlots = newRows * newColumns;
+      if (totalSlots > MAX_TOTAL_SLOTS) {
+        throw new BadRequestException(
+          `rows × columns (${totalSlots}) exceeds the maximum of ${MAX_TOTAL_SLOTS} slots per floor`,
+        );
+      }
+    }
+
+    try {
+      const updated = await this.prisma.$transaction(async (tx) => {
+        const updatedFloor = await tx.parkingFloor.update({
+          where: { id: floor.id },
+          data: {
+            name: dto.name,
+            floorNumber: dto.floorNumber,
+            rows: newRows,
+            columns: newColumns,
+          },
+        });
+
+        if (dto.defaultSlotPrice !== undefined) {
+          await tx.parkingSlot.updateMany({
+            where: { floorId: floor.id },
+            data: { basePrice: dto.defaultSlotPrice },
+          });
+        }
+
+        if (isResizing) {
+          const existingSlots = await tx.parkingSlot.findMany({
+            where: { floorId: floor.id },
+            select: { id: true, slotNumber: true },
+          });
+          const existingNumbers = new Set(
+            existingSlots.map((s) => s.slotNumber),
+          );
+          const targetNumbers = this.buildSlotGridNumbers(newRows, newColumns);
+
+          const toRemoveIds = existingSlots
+            .filter((s) => !targetNumbers.has(s.slotNumber))
+            .map((s) => s.id);
+          const toAddNumbers = [...targetNumbers].filter(
+            (slotNumber) => !existingNumbers.has(slotNumber),
+          );
+
+          if (toAddNumbers.length > 0 && dto.defaultSlotPrice === undefined) {
+            throw new BadRequestException(
+              'defaultSlotPrice is required when growing rows/columns adds new slots to this floor',
+            );
+          }
+
+          if (toRemoveIds.length > 0) {
+            await tx.parkingSlot.deleteMany({
+              where: { id: { in: toRemoveIds } },
+            });
+          }
+          if (toAddNumbers.length > 0) {
+            await tx.parkingSlot.createMany({
+              data: toAddNumbers.map((slotNumber) => ({
+                lotId,
+                floorId: floor.id,
+                slotNumber,
+                basePrice: dto.defaultSlotPrice!,
+              })),
+            });
+          }
+        }
+
+        await this.auditService.log(
+          {
+            entityType: 'ParkingFloor',
+            entityId: updatedFloor.id,
+            action: 'PARKING_FLOOR_UPDATED',
+            userId: requestingUser.userId,
+            metadata: { lotId, ...dto },
+          },
+          tx,
+        );
+
+        return updatedFloor;
       });
 
       const availableSlots = await this.prisma.parkingSlot.count({
@@ -260,8 +332,27 @@ export class ParkingLotService {
           `Floor number ${dto.floorNumber} already exists for this lot`,
         );
       }
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2003'
+      ) {
+        throw new ConflictException(
+          'Cannot shrink this floor: some of the removed slots have existing reservations',
+        );
+      }
       throw error;
     }
+  }
+
+  private buildSlotGridNumbers(rows: number, columns: number): Set<string> {
+    const numbers = new Set<string>();
+    for (let row = 1; row <= rows; row += 1) {
+      const label = rowLabel(row);
+      for (let col = 1; col <= columns; col += 1) {
+        numbers.add(`${label}${col}`);
+      }
+    }
+    return numbers;
   }
 
   async removeFloor(

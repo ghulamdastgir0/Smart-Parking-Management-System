@@ -3,6 +3,7 @@
 import { Html5Qrcode } from "html5-qrcode";
 import { CameraOff } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
 
 function cameraErrorMessage(err: unknown): string {
   const name = err instanceof Error ? err.name : undefined;
@@ -106,7 +107,19 @@ export function QrScanner({
   }, [active, elementId]);
 
   return (
-    <div className="mx-auto aspect-square w-full max-w-sm overflow-hidden rounded-2xl bg-black">
+    <div
+      className={cn(
+        "mx-auto aspect-square w-full max-w-sm overflow-hidden rounded-2xl bg-black",
+        // html5-qrcode's <video> only sets an inline width and lets height follow the
+        // camera's native aspect ratio, which almost never matches our square container —
+        // its scan-target box is then computed off that mismatched, non-square video height,
+        // rendering as a rectangle. Force the video to fill the square exactly (cropped via
+        // object-cover) so the library's own width/height math — and therefore its box — is
+        // square too. `!` (not inline style overrides) is required to beat the video's inline
+        // style attribute.
+        "[&_video]:h-full! [&_video]:w-full! [&_video]:object-cover!",
+      )}
+    >
       {cameraError ? (
         <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-6 text-center">
           <CameraOff className="size-8 text-white/60" />

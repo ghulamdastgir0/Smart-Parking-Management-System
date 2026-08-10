@@ -207,10 +207,12 @@ export class ParkingLotController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.MANAGER)
   @ApiOperation({
-    summary: 'Rename or renumber a floor (Admin/Manager only)',
+    summary:
+      'Rename/renumber/resize a floor and/or reprice its slots (Admin/Manager only)',
     description:
-      'Managers may only update floors on lots they manage. Capacity (rows/columns) is ' +
-      'fixed after creation since resizing would require regenerating the slot grid.',
+      'Managers may only update floors on lots they manage. Growing rows/columns adds ' +
+      'slots (defaultSlotPrice required); shrinking removes the slots that fall outside ' +
+      'the new grid, and fails if any of them has an existing reservation.',
   })
   @ApiResponse({
     status: 200,
@@ -221,7 +223,8 @@ export class ParkingLotController {
   @ApiResponse({ status: 404, description: 'Parking lot or floor not found' })
   @ApiResponse({
     status: 409,
-    description: 'Floor number already exists for this lot',
+    description:
+      'Floor number already exists for this lot, or shrinking would remove slots with existing reservations',
   })
   updateFloor(
     @Param('lotId') lotId: string,
