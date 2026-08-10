@@ -67,11 +67,17 @@ export class HttpExceptionFilter implements ExceptionFilter {
       };
     }
 
+    // Unhandled errors are bugs, not intentional API responses — their message can contain
+    // internal details (DB errors, file paths, etc.), so only surface it outside production.
+    const isProduction = process.env.NODE_ENV === 'production';
+
     if (exception instanceof Error) {
       return {
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-        message: exception.message || 'Internal server error',
-        error: exception.name,
+        message: isProduction
+          ? 'Internal server error'
+          : exception.message || 'Internal server error',
+        error: isProduction ? 'InternalServerError' : exception.name,
       };
     }
 

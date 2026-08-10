@@ -1,16 +1,20 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  app.use(helmet());
+
   // Updated CORS configuration to support dynamic local network testing (iPhone) with credentials
   app.enableCors({
     origin: (origin, callback) => {
-      const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
+      const isDevelopment =
+        process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
       const frontendUrl = process.env.FRONTEND_URL;
 
       // 1. Allow mobile apps, Postman, or server-to-server requests (no origin header)
@@ -45,14 +49,18 @@ async function bootstrap() {
   );
   app.useGlobalFilters(new HttpExceptionFilter());
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('SPMS API')
-    .setDescription('Smart Parking Reservation & Management System API')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
-  const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/docs', app, swaggerDocument);
+  // Swagger exposes the full API schema — keep it out of production to avoid handing
+  // an attacker a ready-made map of every route/DTO shape.
+  if (process.env.NODE_ENV !== 'production') {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('SPMS API')
+      .setDescription('Smart Parking Reservation & Management System API')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+    const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('api/docs', app, swaggerDocument);
+  }
 
   // Set host to '0.0.0.0' so the server binds to your local network, allowing your iPhone to access it
   const port = process.env.PORT ?? 3000;

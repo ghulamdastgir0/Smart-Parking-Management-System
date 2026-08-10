@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import type { FeatureExtractionPipeline } from '@xenova/transformers';
+import type { FeatureExtractionPipeline } from '@huggingface/transformers';
 
 const MODEL_ID = 'Xenova/all-MiniLM-L6-v2'; // 384-dim sentence embeddings, runs locally (ONNX/CPU)
 
-// Local, offline embedding model — no external embedding API. `@xenova/transformers` ships
-// as ESM-only, so it's loaded via dynamic import() rather than require() from this CommonJS
+// Local, offline embedding model — no external embedding API. `@huggingface/transformers`
+// (the maintained successor to `@xenova/transformers`, same author/model hub) ships as
+// ESM-only, so it's loaded via dynamic import() rather than require() from this CommonJS
 // build; the pipeline itself is loaded lazily (first call, not module init) since it's slow
 // and downloads/caches the model weights on first use.
 @Injectable()
@@ -13,7 +14,7 @@ export class EmbeddingService {
 
   private async getPipeline(): Promise<FeatureExtractionPipeline> {
     if (!this.pipelinePromise) {
-      this.pipelinePromise = import('@xenova/transformers').then(
+      this.pipelinePromise = import('@huggingface/transformers').then(
         ({ pipeline }) => pipeline('feature-extraction', MODEL_ID),
       );
     }
