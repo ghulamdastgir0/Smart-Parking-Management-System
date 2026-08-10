@@ -69,14 +69,10 @@ export function QrScanner({
           {
             fps: 10,
             qrbox: (viewfinderWidth, viewfinderHeight) => {
-              // Scale the scan target to the actual camera viewfinder instead of a fixed
-              // pixel size, so it fits properly regardless of the device's camera resolution.
-              // Capped so it stays close to a real QR code's footprint in frame rather than
-              // ballooning to nearly the whole viewfinder on larger screens/camera feeds.
-              const size = Math.min(
-                Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.5),
-                250,
-              );
+              // Fixed 200x200 target to match the QR codes we generate, on any screen size.
+              // Only shrinks below 200 if the camera viewfinder itself is smaller than that,
+              // since html5-qrcode requires the qrbox to fit within the viewfinder.
+              const size = Math.min(200, viewfinderWidth, viewfinderHeight);
               return { width: size, height: size };
             },
           },

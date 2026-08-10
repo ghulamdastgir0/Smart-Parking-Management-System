@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Plus } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
@@ -10,6 +10,13 @@ import { z } from "zod";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Form,
   FormControl,
@@ -29,16 +36,25 @@ import {
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { useAuth } from "@/features/auth/auth-provider";
 import {
   useCreateFloor,
+  useDeleteFloor,
   useFloors,
   useParkingLot,
+  useUpdateFloor,
   useUpdateParkingLot,
 } from "@/features/parking-lots/hooks";
-import { floorSchema, type FloorFormValues } from "@/features/parking-lots/schemas";
+import type { ParkingFloor } from "@/features/parking-lots/types";
+import {
+  editFloorSchema,
+  floorSchema,
+  type EditFloorFormValues,
+  type FloorFormValues,
+} from "@/features/parking-lots/schemas";
 import { useAdminUsers } from "@/features/users/hooks";
 import { reverseGeocode } from "@/lib/geocode";
 
@@ -157,6 +173,90 @@ function AddFloorForm({ lotId, nextFloorNumber }: { lotId: string; nextFloorNumb
   );
 }
 
+function EditFloorDialog({
+  lotId,
+  floor,
+  open,
+  onOpenChange,
+}: {
+  lotId: string;
+  floor: ParkingFloor;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const updateFloor = useUpdateFloor(lotId);
+  const form = useForm<EditFloorFormValues>({
+    resolver: zodResolver(editFloorSchema),
+    defaultValues: { name: floor.name, floorNumber: floor.floorNumber },
+    mode: "onBlur",
+  });
+
+  useEffect(() => {
+    // Sync the form when a different floor is opened for editing.
+    form.reset({ name: floor.name, floorNumber: floor.floorNumber });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [floor]);
+
+  function onSubmit(values: EditFloorFormValues) {
+    updateFloor.mutate(
+      { floorId: floor.id, payload: values },
+      { onSuccess: () => onOpenChange(false) },
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit floor</DialogTitle>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs">Name</FormLabel>
+                  <FormControl>
+                    <Input {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="floorNumber"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs">Floor #</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      {...field}
+                      onChange={(e) => field.onChange(Number(e.target.value))}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={updateFloor.isPending}>
+                {updateFloor.isPending ? "Saving…" : "Save"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 const LocationPickerMap = dynamic(
   () => import("@/components/map/location-picker-map").then((m) => m.LocationPickerMap),
   { ssr: false, loading: () => <Skeleton className="h-full w-full rounded-xl" /> },
@@ -188,8 +288,11 @@ export default function EditParkingLotPage({
   const { data: floors } = useFloors(id);
   const { data: users } = useAdminUsers();
   const managers = users?.filter((u) => u.role === "MANAGER") ?? [];
+  const deleteFloor = useDeleteFloor(id);
 
   const [position, setPosition] = useState<[number, number] | null>(null);
+  const [editingFloor, setEditingFloor] = useState<ParkingFloor | null>(null);
+  const [deletingFloor, setDeletingFloor] = useState<ParkingFloor | null>(null);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -354,9 +457,28 @@ export default function EditParkingLotPage({
                     {floor.rows} × {floor.columns} layout
                   </p>
                 </div>
-                <Badge variant={floor.availableSlots > 0 ? "success" : "destructive"}>
-                  {floor.availableSlots}/{floor.totalSlots} available
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant={floor.availableSlots > 0 ? "success" : "destructive"}>
+                    {floor.availableSlots}/{floor.totalSlots} available
+                  </Badge>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Edit ${floor.name}`}
+                    onClick={() => setEditingFloor(floor)}
+                  >
+                    <Pencil className="size-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-destructive"
+                    aria-label={`Delete ${floor.name}`}
+                    onClick={() => setDeletingFloor(floor)}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
@@ -371,6 +493,30 @@ export default function EditParkingLotPage({
           </div>
         </CardContent>
       </Card>
+
+      {editingFloor && (
+        <EditFloorDialog
+          lotId={id}
+          floor={editingFloor}
+          open={Boolean(editingFloor)}
+          onOpenChange={(open) => !open && setEditingFloor(null)}
+        />
+      )}
+
+      <ConfirmDialog
+        open={Boolean(deletingFloor)}
+        onOpenChange={(open) => !open && setDeletingFloor(null)}
+        title="Delete floor"
+        description={`Delete "${deletingFloor?.name}" and all of its slots? This can't be undone, and will fail if any slot has an existing reservation.`}
+        confirmLabel="Delete"
+        isPending={deleteFloor.isPending}
+        onConfirm={() =>
+          deletingFloor &&
+          deleteFloor.mutate(deletingFloor.id, {
+            onSuccess: () => setDeletingFloor(null),
+          })
+        }
+      />
     </div>
   );
 }

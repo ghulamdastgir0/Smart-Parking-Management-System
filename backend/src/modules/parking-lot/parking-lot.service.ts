@@ -18,6 +18,7 @@ import {
 import { FindNearbyLotsDto } from './dto/find-nearby-lots.dto';
 import { NearbyParkingLotDto } from './dto/nearby-parking-lot.dto';
 import { ParkingFloorResponseDto } from './dto/parking-floor-response.dto';
+import { UpdateParkingFloorDto } from './dto/update-parking-floor.dto';
 import { UpdateParkingLotDto } from './dto/update-parking-lot.dto';
 import { LocationService } from './location.service';
 import { MapsService } from './maps.service';
@@ -216,6 +217,94 @@ export class ParkingLotService {
       totalSlots: floor.rows * floor.columns,
       availableSlots: availabilityMap.get(floor.id) ?? 0,
     }));
+  }
+
+  async updateFloor(
+    lotId: string,
+    floorId: string,
+    dto: UpdateParkingFloorDto,
+    requestingUser: AuthenticatedUser,
+  ): Promise<ParkingFloorResponseDto> {
+    await this.assertManagerOwnsLot(lotId, requestingUser);
+    const floor = await this.assertFloorBelongsToLot(lotId, floorId);
+
+    try {
+      const updated = await this.prisma.parkingFloor.update({
+        where: { id: floor.id },
+        data: dto,
+      });
+
+      await this.auditService.log({
+        entityType: 'ParkingFloor',
+        entityId: updated.id,
+        action: 'PARKING_FLOOR_UPDATED',
+        userId: requestingUser.userId,
+        metadata: { lotId, ...dto },
+      });
+
+      const availableSlots = await this.prisma.parkingSlot.count({
+        where: { floorId: updated.id, status: SlotStatus.AVAILABLE },
+      });
+
+      return {
+        ...updated,
+        totalSlots: updated.rows * updated.columns,
+        availableSlots,
+      };
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          `Floor number ${dto.floorNumber} already exists for this lot`,
+        );
+      }
+      throw error;
+    }
+  }
+
+  async removeFloor(
+    lotId: string,
+    floorId: string,
+    requestingUser: AuthenticatedUser,
+  ): Promise<void> {
+    await this.assertManagerOwnsLot(lotId, requestingUser);
+    const floor = await this.assertFloorBelongsToLot(lotId, floorId);
+
+    try {
+      await this.prisma.parkingFloor.delete({ where: { id: floor.id } });
+
+      await this.auditService.log({
+        entityType: 'ParkingFloor',
+        entityId: floor.id,
+        action: 'PARKING_FLOOR_DELETED',
+        userId: requestingUser.userId,
+        metadata: { lotId },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2003'
+      ) {
+        throw new ConflictException(
+          'Cannot delete this floor: it has slots tied to existing reservations',
+        );
+      }
+      throw error;
+    }
+  }
+
+  private async assertFloorBelongsToLot(lotId: string, floorId: string) {
+    const floor = await this.prisma.parkingFloor.findUnique({
+      where: { id: floorId },
+    });
+    if (!floor || floor.lotId !== lotId) {
+      throw new NotFoundException(
+        `Floor ${floorId} not found on parking lot ${lotId}`,
+      );
+    }
+    return floor;
   }
 
   /**

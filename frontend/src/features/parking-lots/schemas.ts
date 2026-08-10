@@ -18,3 +18,14 @@ export const floorSchema = z.object({
 });
 
 export type FloorFormValues = z.infer<typeof floorSchema>;
+
+export const editFloorSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Floor name is required")
+    .max(FLOOR_NAME_MAX_LENGTH, `Floor name must be ${FLOOR_NAME_MAX_LENGTH} characters or fewer`),
+  floorNumber: z.number().int().min(0).max(999),
+});
+
+export type EditFloorFormValues = z.infer<typeof editFloorSchema>;

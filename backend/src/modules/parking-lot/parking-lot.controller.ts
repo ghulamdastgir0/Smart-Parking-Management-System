@@ -28,6 +28,7 @@ import { CreateParkingLotDto } from './dto/create-parking-lot.dto';
 import { FindNearbyLotsDto } from './dto/find-nearby-lots.dto';
 import { NearbyParkingLotDto } from './dto/nearby-parking-lot.dto';
 import { ParkingFloorResponseDto } from './dto/parking-floor-response.dto';
+import { UpdateParkingFloorDto } from './dto/update-parking-floor.dto';
 import { UpdateParkingLotDto } from './dto/update-parking-lot.dto';
 import {
   ParkingLotService,
@@ -199,5 +200,62 @@ export class ParkingLotController {
   ): Promise<ParkingFloorResponseDto> {
     const user = req.user as AuthenticatedUser;
     return this.parkingLotService.createFloor(lotId, dto, user);
+  }
+
+  @Patch(':lotId/floors/:floorId')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.MANAGER)
+  @ApiOperation({
+    summary: 'Rename or renumber a floor (Admin/Manager only)',
+    description:
+      'Managers may only update floors on lots they manage. Capacity (rows/columns) is ' +
+      'fixed after creation since resizing would require regenerating the slot grid.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Floor updated',
+    type: ParkingFloorResponseDto,
+  })
+  @ApiResponse({ status: 403, description: 'Manager does not own this lot' })
+  @ApiResponse({ status: 404, description: 'Parking lot or floor not found' })
+  @ApiResponse({
+    status: 409,
+    description: 'Floor number already exists for this lot',
+  })
+  updateFloor(
+    @Param('lotId') lotId: string,
+    @Param('floorId') floorId: string,
+    @Body() dto: UpdateParkingFloorDto,
+    @Req() req: Request,
+  ): Promise<ParkingFloorResponseDto> {
+    const user = req.user as AuthenticatedUser;
+    return this.parkingLotService.updateFloor(lotId, floorId, dto, user);
+  }
+
+  @Delete(':lotId/floors/:floorId')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.MANAGER)
+  @ApiOperation({
+    summary: 'Delete a floor and its slots (Admin/Manager only)',
+    description:
+      'Managers may only delete floors on lots they manage. Blocked if any slot on the ' +
+      'floor is tied to an existing reservation.',
+  })
+  @ApiResponse({ status: 200, description: 'Floor deleted' })
+  @ApiResponse({ status: 403, description: 'Manager does not own this lot' })
+  @ApiResponse({ status: 404, description: 'Parking lot or floor not found' })
+  @ApiResponse({
+    status: 409,
+    description: 'Floor has slots tied to existing reservations',
+  })
+  removeFloor(
+    @Param('lotId') lotId: string,
+    @Param('floorId') floorId: string,
+    @Req() req: Request,
+  ): Promise<void> {
+    const user = req.user as AuthenticatedUser;
+    return this.parkingLotService.removeFloor(lotId, floorId, user);
   }
 }

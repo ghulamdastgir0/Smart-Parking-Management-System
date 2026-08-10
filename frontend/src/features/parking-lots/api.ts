@@ -6,6 +6,7 @@ import type {
   NearbyParkingLot,
   ParkingFloor,
   ParkingLot,
+  UpdateFloorPayload,
   UpdateParkingLotPayload,
 } from "./types";
 
@@ -42,5 +43,15 @@ export const parkingLotsApi = {
   createFloor: (lotId: string, payload: FloorInput) =>
     apiClient
       .post<ParkingFloor>(`/parking-lots/${lotId}/floors`, payload)
+      .then((res) => res.data),
+
+  updateFloor: (lotId: string, floorId: string, payload: UpdateFloorPayload) =>
+    apiClient
+      .patch<ParkingFloor>(`/parking-lots/${lotId}/floors/${floorId}`, payload)
+      .then((res) => res.data),
+
+  deleteFloor: (lotId: string, floorId: string) =>
+    apiClient
+      .delete<void>(`/parking-lots/${lotId}/floors/${floorId}`)
       .then((res) => res.data),
 };

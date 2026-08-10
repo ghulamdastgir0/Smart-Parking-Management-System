@@ -8,6 +8,7 @@ import type {
   CreateParkingLotPayload,
   FindNearbyLotsParams,
   FloorInput,
+  UpdateFloorPayload,
   UpdateParkingLotPayload,
 } from "./types";
 
@@ -96,6 +97,33 @@ export function useCreateFloor(lotId: string) {
       parkingLotsApi.createFloor(lotId, payload),
     onSuccess: () => {
       toast.success("Floor added");
+      queryClient.invalidateQueries({ queryKey: parkingLotsKeys.floors(lotId) });
+      queryClient.invalidateQueries({ queryKey: parkingLotsKeys.detail(lotId) });
+      queryClient.invalidateQueries({ queryKey: parkingLotsKeys.all });
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error)),
+  });
+}
+
+export function useUpdateFloor(lotId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ floorId, payload }: { floorId: string; payload: UpdateFloorPayload }) =>
+      parkingLotsApi.updateFloor(lotId, floorId, payload),
+    onSuccess: () => {
+      toast.success("Floor updated");
+      queryClient.invalidateQueries({ queryKey: parkingLotsKeys.floors(lotId) });
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error)),
+  });
+}
+
+export function useDeleteFloor(lotId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (floorId: string) => parkingLotsApi.deleteFloor(lotId, floorId),
+    onSuccess: () => {
+      toast.success("Floor deleted");
       queryClient.invalidateQueries({ queryKey: parkingLotsKeys.floors(lotId) });
       queryClient.invalidateQueries({ queryKey: parkingLotsKeys.detail(lotId) });
       queryClient.invalidateQueries({ queryKey: parkingLotsKeys.all });

@@ -52,6 +52,11 @@ export interface FloorInput {
   defaultSlotPrice: number;
 }
 
+export interface UpdateFloorPayload {
+  name?: string;
+  floorNumber?: number;
+}
+
 export interface CreateParkingLotPayload {
   name: string;
   address: string;

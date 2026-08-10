@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker build *)",
+      "Bash(docker run *)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:8082/)",
+      "Bash(curl -s -D - -o /dev/null http://localhost:8082/)",
+      "Bash(docker rm *)",
+      "Bash(docker network *)",
+      "Bash(docker rmi *)",
+      "Bash(npm audit *)",
+      "Bash(npm run *)",
+      "Bash(docker exec *)",
+      "Bash(break)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:8081/api/docs)",
+      "Bash(curl -s -D - -o /dev/null http://localhost:8081/auth/login -X POST -H \"Content-Type: application/json\" -d '{}')",
+      "Bash(curl -s http://localhost:8081/reservations -X POST -H \"Content-Type: application/json\" -H \"Authorization: Bearer garbage\" -d '{}')",
+      "Bash(docker kill *)",
+      "Bash(xargs -I{} sh -c 'echo \"=== {} ===\"; cat \"{}\"')",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:8081/parking-lots)",
+      "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(48\\).toString\\('base64'\\)\\)\")",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" https://spms-backend-397963581210.asia-south1.run.app/parking-lots)",
+      "Bash(curl -s -D - -o /dev/null https://spms-backend-397963581210.asia-south1.run.app/)",
+      "Bash(docker push *)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" https://spms-frontend-397963581210.asia-south1.run.app/login)",
+      "Bash(curl -s -D - -o /dev/null -X OPTIONS https://spms-backend-397963581210.asia-south1.run.app/auth/login -H 'Origin: https://spms-frontend-397963581210.asia-south1.run.app' -H 'Access-Control-Request-Method: POST')",
+      "Bash(curl -s -D - -o /dev/null -X OPTIONS https://spms-backend-397963581210.asia-south1.run.app/auth/login -H 'Origin: https://evil.example.com' -H 'Access-Control-Request-Method: POST')",
+      "Bash(curl -s https://spms-backend-397963581210.asia-south1.run.app/auth/login -X POST -H 'Content-Type: application/json' -d '{\"email\":\"ghulamdastgir1295@gmail.com\",\"password\":\"12345678\"}')",
+      "Bash(node -e ' *)",
+      "Bash(node \"/c/Users/ADMINI~1/AppData/Local/Temp/claude/e--Smart-Parking-Management-System/f368cf23-038d-4f7c-b27b-9e2e1c54c5b3/scratchpad/test-embedding.mjs\")",
+      "Bash(node test-embedding.mjs)",
+      "Bash(git stash *)",
+      "Bash(npx eslint *)"
+    ]
+  }
+}
