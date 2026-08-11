@@ -136,12 +136,16 @@ export default function BookingPage({
   }, [floors, selectedFloorId]);
 
   // Only customers can book parking — staff who land here directly (e.g. a stale bookmark)
-  // get bounced back to the lot's management view instead.
+  // get bounced back to the lot's management view instead. Redirecting is a side effect (fires
+  // after the initial render), so the JSX below also checks `isStaff` directly rather than
+  // relying on the effect alone — otherwise staff would see a one-frame flash of the booking
+  // form before being sent away.
+  const isStaff = Boolean(user && user.role !== "CUSTOMER");
   useEffect(() => {
-    if (user && user.role !== "CUSTOMER") {
+    if (isStaff) {
       router.replace(`/parking-lots/${lotId}`);
     }
-  }, [user, lotId, router]);
+  }, [isStaff, lotId, router]);
 
   const createReservation = useCreateReservation();
 
@@ -205,6 +209,10 @@ export default function BookingPage({
       },
       { onSuccess: (data) => setResult(data) },
     );
+  }
+
+  if (isStaff) {
+    return null;
   }
 
   if (result) {
